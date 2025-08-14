@@ -35,13 +35,21 @@ param(
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
 
-# Import error recovery functions
-$helpersPath = Join-Path $PSScriptRoot "error_recovery_helpers.ps1"
+# Import error recovery functions (FIXED VERSION)
+$helpersPath = Join-Path $PSScriptRoot "error_recovery_helpers_fixed.ps1"
 if (Test-Path $helpersPath) {
     . $helpersPath
+    Write-VerboseInfo "Loaded FIXED error recovery helpers with ARM64 support"
 } else {
-    Write-Error "Error recovery helpers not found at: $helpersPath"
-    exit 1
+    # Fallback to original helpers
+    $originalHelpersPath = Join-Path $PSScriptRoot "error_recovery_helpers.ps1"
+    if (Test-Path $originalHelpersPath) {
+        . $originalHelpersPath
+        Write-WarningMsg "Using original helpers - may have ARM64 compatibility issues"
+    } else {
+        Write-Error "Error recovery helpers not found at either: $helpersPath or $originalHelpersPath"
+        exit 1
+    }
 }
 
 # Global script configuration
@@ -446,9 +454,17 @@ function Test-HardwareRequirements {
     $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
     Write-Info "Detected architecture: $arch"
     
-    # Snapdragon X Elite reports as AMD64 for compatibility
+    # Get detailed architecture information for package selection
+    $archInfo = Get-ProcessorArchitecture
+    $script:checkpoint.Environment["Architecture"] = $archInfo.Architecture
+    $script:checkpoint.Environment["IsARM"] = $archInfo.IsARM
+    $script:checkpoint.Environment["IsIntel"] = $archInfo.IsIntel
+    
+    Write-VerboseInfo "Architecture details: ARM=$($archInfo.IsARM), Intel=$($archInfo.IsIntel)"
+    
+    # Snapdragon X Elite reports as AMD64 for compatibility but is actually ARM64
     if ($arch -eq "AMD64" -or $arch -eq "ARM64") {
-        Write-Success "Architecture compatible: $arch"
+        Write-Success "Architecture compatible: $arch $(if ($archInfo.IsARM) { '(ARM64/Snapdragon)' } else { '(x64)' })"
         $requirements.Architecture = $true
     } else {
         Write-WarningMsg "Unusual architecture detected: $arch"
@@ -655,12 +671,15 @@ function Install-Dependencies {
         }
     }
     
-    # Install PyTorch for ARM64 with fallback
-    Write-Info "Installing PyTorch for ARM64..."
-    $torchSuccess = Install-PackageWithFallback -PackageName "torch" -Version "==2.1.2" -Critical $true
+    # Install PyTorch for ARM64 with proper fallback chain
+    Write-Info "Installing PyTorch for ARM64/Snapdragon..."
+    
+    # Use the specialized ARM64 PyTorch installer
+    $torchSuccess = Install-PyTorchForARM64
+    
     if (!$torchSuccess) {
-        Write-WarningMsg "PyTorch installation failed, trying alternative..."
-        $torchSuccess = Install-PackageWithFallback -PackageName "torch-cpu" -Critical $false
+        Write-WarningMsg "Specialized PyTorch installation failed, trying standard approach..."
+        $torchSuccess = Install-PackageWithFallback -PackageName "torch" -Version ">=2.1.0,<2.2.0" -Critical $false
     }
     
     # Install AI/ML dependencies

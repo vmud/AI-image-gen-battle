@@ -46,6 +46,25 @@ $script:rollbackStack = @()
 $script:logFile = $null
 $script:transcriptStarted = $false
 
+# Idempotency and state management
+$script:stateFile = "$script:DEMO_BASE\intel_deployment_state.json"
+$script:deploymentState = $null
+$script:machineFingerprint = $null
+$script:resumeFromStep = 0
+$script:checkpointSteps = @(
+    "directories",
+    "hardware_check",
+    "python_install",
+    "core_dependencies",
+    "intel_acceleration",
+    "directml_config",
+    "models_download",
+    "repository_update",
+    "network_config",
+    "startup_scripts",
+    "performance_test"
+)
+
 # Constants
 $script:DEMO_BASE = "C:\AIDemo"
 $script:VENV_PATH = "$script:DEMO_BASE\venv"
@@ -82,6 +101,487 @@ function Write-VerboseInfo {
     if ($VerbosePreference -eq 'Continue') {
         Write-Host "  -> $Message" -ForegroundColor DarkGray
     }
+}
+
+# ============================================================================
+# IDEMPOTENCY AND STATE MANAGEMENT FUNCTIONS
+# ============================================================================
+
+# Generate machine fingerprint for environment validation
+function Get-MachineFingerprint {
+    Write-VerboseInfo "Generating machine fingerprint for environment validation"
+    
+    try {
+        $cpu = Get-WmiObject Win32_Processor | Select-Object -First 1
+        $memory = Get-WmiObject Win32_ComputerSystem
+        $os = Get-WmiObject Win32_OperatingSystem
+        $motherboard = Get-WmiObject Win32_BaseBoard
+        
+        $fingerprint = @{
+            ProcessorId = $cpu.ProcessorId
+            ProcessorName = $cpu.Name
+            TotalMemory = $memory.TotalPhysicalMemory
+            OSVersion = $os.Version
+            OSBuildNumber = $os.BuildNumber
+            ComputerName = $env:COMPUTERNAME
+            Username = $env:USERNAME
+            Architecture = $env:PROCESSOR_ARCHITECTURE
+            MotherboardSerial = $motherboard.SerialNumber
+            Timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        }
+        
+        # Create a stable hash from the fingerprint
+        $fingerprintString = ($fingerprint.GetEnumerator() | Sort-Object Key | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';'
+        $hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($fingerprintString))
+        $hashString = [System.BitConverter]::ToString($hash) -replace '-', ''
+        
+        Write-VerboseInfo "Machine fingerprint generated: $($hashString.Substring(0, 12))..."
+        return @{
+            Hash = $hashString
+            Details = $fingerprint
+        }
+    } catch {
+        Write-WarningMsg "Could not generate machine fingerprint: $_"
+        return @{
+            Hash = "UNKNOWN"
+            Details = @{ Error = $_.Exception.Message }
+        }
+    }
+}
+
+# Initialize or load deployment state
+function Initialize-DeploymentState {
+    Write-VerboseInfo "Initializing deployment state management"
+    
+    # Update state file path to use correct base directory
+    $script:stateFile = "$script:DEMO_BASE\intel_deployment_state.json"
+    
+    # Generate machine fingerprint
+    $script:machineFingerprint = Get-MachineFingerprint
+    
+    if (Test-Path $script:stateFile) {
+        try {
+            Write-VerboseInfo "Loading existing deployment state from $script:stateFile"
+            $stateContent = Get-Content $script:stateFile -Raw | ConvertFrom-Json
+            
+            # Validate state file version compatibility
+            if ($stateContent.StateVersion -ne "1.0") {
+                Write-WarningMsg "State file version mismatch. Creating new state."
+                $script:deploymentState = New-DeploymentState
+            } else {
+                $script:deploymentState = $stateContent
+                
+                # Validate machine fingerprint for environment consistency
+                if ($script:deploymentState.MachineFingerprint.Hash -ne $script:machineFingerprint.Hash) {
+                    Write-WarningMsg "Machine fingerprint changed. Environment may have been modified."
+                    Write-VerboseInfo "Previous: $($script:deploymentState.MachineFingerprint.Hash.Substring(0, 12))..."
+                    Write-VerboseInfo "Current:  $($script:machineFingerprint.Hash.Substring(0, 12))..."
+                    
+                    if (!$Force) {
+                        $continue = Read-Host "Continue with different environment? (Y/N)"
+                        if ($continue -ne 'Y') {
+                            throw "Environment validation failed. Use -Force to override."
+                        }
+                    }
+                    
+                    # Update fingerprint but preserve other state
+                    $script:deploymentState.MachineFingerprint = $script:machineFingerprint
+                }
+                
+                Write-Success "Loaded existing deployment state"
+                Write-VerboseInfo "Last update: $($script:deploymentState.LastUpdate)"
+                Write-VerboseInfo "Completed steps: $($script:deploymentState.CompletedSteps.Count)"
+            }
+        } catch {
+            Write-WarningMsg "Could not load existing state: $_"
+            Write-Info "Creating new deployment state"
+            $script:deploymentState = New-DeploymentState
+        }
+    } else {
+        Write-VerboseInfo "No existing state found. Creating new deployment state."
+        $script:deploymentState = New-DeploymentState
+    }
+    
+    # Determine resume point
+    $script:resumeFromStep = Get-ResumePoint
+    if ($script:resumeFromStep -gt 0) {
+        Write-Info "Resuming from step $script:resumeFromStep ($(Get-StepName $script:resumeFromStep))"
+    }
+}
+
+# Create new deployment state structure
+function New-DeploymentState {
+    return @{
+        StateVersion = "1.0"
+        CreatedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        LastUpdate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        MachineFingerprint = $script:machineFingerprint
+        CompletedSteps = @()
+        StepDetails = @{}
+        PackageVersions = @{}
+        ValidationResults = @{}
+        Checkpoints = @{}
+        ErrorHistory = @()
+        Configuration = @{
+            OptimizationProfile = $OptimizationProfile
+            LogPath = $LogPath
+            SkipModelDownload = $SkipModelDownload.ToBool()
+            UseHttpRange = $UseHttpRange.ToBool()
+        }
+    }
+}
+
+# Save deployment state to file
+function Save-DeploymentState {
+    param([string]$Context = "General")
+    
+    if ($script:deploymentState -eq $null) {
+        Write-VerboseInfo "No deployment state to save"
+        return
+    }
+    
+    try {
+        $script:deploymentState.LastUpdate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        $script:deploymentState.MachineFingerprint = $script:machineFingerprint
+        
+        $stateJson = $script:deploymentState | ConvertTo-Json -Depth 10
+        
+        # Ensure state file directory exists
+        $stateDir = Split-Path $script:stateFile -Parent
+        if (!(Test-Path $stateDir)) {
+            New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+        }
+        
+        $stateJson | Out-File -FilePath $script:stateFile -Encoding UTF8
+        Write-VerboseInfo "Deployment state saved ($Context)"
+    } catch {
+        Write-WarningMsg "Could not save deployment state: $_"
+    }
+}
+
+# Check if a step is already completed
+function Test-StepCompleted {
+    param([string]$StepName)
+    
+    if ($script:deploymentState -eq $null) {
+        return $false
+    }
+    
+    return $script:deploymentState.CompletedSteps -contains $StepName
+}
+
+# Mark a step as completed
+function Set-StepCompleted {
+    param(
+        [string]$StepName,
+        [hashtable]$Details = @{}
+    )
+    
+    if ($script:deploymentState -eq $null) {
+        Write-WarningMsg "No deployment state available"
+        return
+    }
+    
+    if (!(Test-StepCompleted $StepName)) {
+        $script:deploymentState.CompletedSteps += $StepName
+    }
+    
+    $script:deploymentState.StepDetails[$StepName] = @{
+        CompletedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        Details = $Details
+    }
+    
+    Save-DeploymentState "Step: $StepName"
+    Write-VerboseInfo "Marked step as completed: $StepName"
+}
+
+# Create checkpoint for current state
+function New-Checkpoint {
+    param([string]$CheckpointName)
+    
+    if ($script:deploymentState -eq $null) {
+        Write-WarningMsg "No deployment state available for checkpoint"
+        return
+    }
+    
+    $checkpoint = @{
+        Name = $CheckpointName
+        CreatedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        CompletedSteps = $script:deploymentState.CompletedSteps.Clone()
+        StepDetails = $script:deploymentState.StepDetails.Clone()
+        PackageVersions = $script:deploymentState.PackageVersions.Clone()
+    }
+    
+    $script:deploymentState.Checkpoints[$CheckpointName] = $checkpoint
+    Save-DeploymentState "Checkpoint: $CheckpointName"
+    Write-VerboseInfo "Created checkpoint: $CheckpointName"
+}
+
+# Get resume point based on completed steps
+function Get-ResumePoint {
+    if ($script:deploymentState -eq $null -or $script:deploymentState.CompletedSteps.Count -eq 0) {
+        return 0
+    }
+    
+    for ($i = 0; $i -lt $script:checkpointSteps.Count; $i++) {
+        if (!(Test-StepCompleted $script:checkpointSteps[$i])) {
+            return $i
+        }
+    }
+    
+    return $script:checkpointSteps.Count
+}
+
+# Get step name from index
+function Get-StepName {
+    param([int]$StepIndex)
+    
+    if ($StepIndex -ge 0 -and $StepIndex -lt $script:checkpointSteps.Count) {
+        return $script:checkpointSteps[$StepIndex]
+    }
+    
+    return "Unknown"
+}
+
+# Smart package version checking
+function Test-PackageVersionCompatible {
+    param(
+        [string]$PackageName,
+        [string]$RequiredVersion,
+        [string]$IndexUrl = $null
+    )
+    
+    Write-VerboseInfo "Checking package compatibility: $PackageName $RequiredVersion"
+    
+    try {
+        # Check if package is already installed
+        $installedVersion = Get-InstalledPackageVersion $PackageName
+        
+        if ($installedVersion) {
+            $compatible = Test-VersionInRange $installedVersion $RequiredVersion
+            if ($compatible) {
+                Write-Success "Package $PackageName $installedVersion is compatible (required: $RequiredVersion)"
+                
+                # Record in state
+                if ($script:deploymentState) {
+                    $script:deploymentState.PackageVersions[$PackageName] = @{
+                        InstalledVersion = $installedVersion
+                        RequiredVersion = $RequiredVersion
+                        Compatible = $true
+                        CheckedAt = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                    }
+                }
+                
+                return $true
+            } else {
+                Write-WarningMsg "Package $PackageName $installedVersion is not compatible (required: $RequiredVersion)"
+                return $false
+            }
+        } else {
+            Write-VerboseInfo "Package $PackageName is not installed"
+            return $false
+        }
+    } catch {
+        Write-VerboseInfo "Error checking package compatibility: $_"
+        return $false
+    }
+}
+
+# Get installed package version
+function Get-InstalledPackageVersion {
+    param([string]$PackageName)
+    
+    try {
+        $result = & pip show $PackageName 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $versionLine = $result | Where-Object { $_ -match "^Version: " }
+            if ($versionLine) {
+                return $versionLine.Split(": ")[1].Trim()
+            }
+        }
+    } catch {
+        # Package not found or error
+    }
+    
+    return $null
+}
+
+# Test if version is in required range
+function Test-VersionInRange {
+    param(
+        [string]$Version,
+        [string]$RequiredRange
+    )
+    
+    try {
+        # Parse version constraints (e.g., ">=2.1.0,<2.2.0")
+        $constraints = $RequiredRange -split ','
+        
+        foreach ($constraint in $constraints) {
+            $constraint = $constraint.Trim()
+            
+            if ($constraint -match '^>=(.+)$') {
+                $minVersion = $matches[1]
+                if ([version]$Version -lt [version]$minVersion) {
+                    return $false
+                }
+            } elseif ($constraint -match '^>(.+)$') {
+                $minVersion = $matches[1]
+                if ([version]$Version -le [version]$minVersion) {
+                    return $false
+                }
+            } elseif ($constraint -match '^<=(.+)$') {
+                $maxVersion = $matches[1]
+                if ([version]$Version -gt [version]$maxVersion) {
+                    return $false
+                }
+            } elseif ($constraint -match '^<(.+)$') {
+                $maxVersion = $matches[1]
+                if ([version]$Version -ge [version]$maxVersion) {
+                    return $false
+                }
+            } elseif ($constraint -match '^==(.+)$') {
+                $exactVersion = $matches[1]
+                if ([version]$Version -ne [version]$exactVersion) {
+                    return $false
+                }
+            }
+        }
+        
+        return $true
+    } catch {
+        Write-VerboseInfo "Error parsing version constraint: $_"
+        return $false
+    }
+}
+
+# Enhanced validation with state tracking
+function Invoke-ValidationWithState {
+    param(
+        [string]$ValidationName,
+        [scriptblock]$ValidationScript,
+        [hashtable]$ExpectedResults = @{}
+    )
+    
+    Write-VerboseInfo "Running validation: $ValidationName"
+    
+    try {
+        $startTime = Get-Date
+        $result = & $ValidationScript
+        $endTime = Get-Date
+        $duration = ($endTime - $startTime).TotalSeconds
+        
+        $validationResult = @{
+            Name = $ValidationName
+            Success = $result
+            Duration = $duration
+            Timestamp = $startTime.ToString('yyyy-MM-dd HH:mm:ss')
+            Details = $ExpectedResults
+        }
+        
+        if ($script:deploymentState) {
+            $script:deploymentState.ValidationResults[$ValidationName] = $validationResult
+            Save-DeploymentState "Validation: $ValidationName"
+        }
+        
+        if ($result) {
+            Write-Success "Validation passed: $ValidationName ($($duration.ToString('F2'))s)"
+        } else {
+            Write-WarningMsg "Validation failed: $ValidationName ($($duration.ToString('F2'))s)"
+        }
+        
+        return $result
+    } catch {
+        $errorResult = @{
+            Name = $ValidationName
+            Success = $false
+            Error = $_.Exception.Message
+            Timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+        }
+        
+        if ($script:deploymentState) {
+            $script:deploymentState.ValidationResults[$ValidationName] = $errorResult
+            $script:deploymentState.ErrorHistory += $errorResult
+            Save-DeploymentState "Validation Error: $ValidationName"
+        }
+        
+        Write-ErrorMsg "Validation error: $ValidationName - $_"
+        return $false
+    }
+}
+
+# Generate comprehensive deployment report
+function Get-DeploymentStateReport {
+    if ($script:deploymentState -eq $null) {
+        return "No deployment state available"
+    }
+    
+    $report = @"
+
+========================================
+DEPLOYMENT STATE REPORT
+========================================
+State Version: $($script:deploymentState.StateVersion)
+Created: $($script:deploymentState.CreatedAt)
+Last Update: $($script:deploymentState.LastUpdate)
+Machine: $($script:deploymentState.MachineFingerprint.Details.ComputerName)
+
+PROGRESS SUMMARY:
+Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:checkpointSteps.Count)
+"@
+
+    if ($script:deploymentState.CompletedSteps.Count -gt 0) {
+        $report += "`n`nCOMPLETED STEPS:`n"
+        foreach ($step in $script:deploymentState.CompletedSteps) {
+            $details = $script:deploymentState.StepDetails[$step]
+            $report += "  ✓ $step"
+            if ($details) {
+                $report += " ($(($details.CompletedAt)))"
+            }
+            $report += "`n"
+        }
+    }
+    
+    if ($script:deploymentState.PackageVersions.Count -gt 0) {
+        $report += "`nPACKAGE VERSIONS:`n"
+        foreach ($package in $script:deploymentState.PackageVersions.GetEnumerator()) {
+            $info = $package.Value
+            $status = if ($info.Compatible) { "✓" } else { "✗" }
+            $report += "  $status $($package.Key): $($info.InstalledVersion)`n"
+        }
+    }
+    
+    if ($script:deploymentState.ValidationResults.Count -gt 0) {
+        $report += "`nVALIDATION RESULTS:`n"
+        foreach ($validation in $script:deploymentState.ValidationResults.GetEnumerator()) {
+            $result = $validation.Value
+            $status = if ($result.Success) { "✓" } else { "✗" }
+            $report += "  $status $($validation.Key)"
+            if ($result.Duration) {
+                $report += " ($($result.Duration.ToString('F2'))s)"
+            }
+            $report += "`n"
+        }
+    }
+    
+    if ($script:deploymentState.Checkpoints.Count -gt 0) {
+        $report += "`nCHECKPOINTS:`n"
+        foreach ($checkpoint in $script:deploymentState.Checkpoints.GetEnumerator()) {
+            $cp = $checkpoint.Value
+            $report += "  📍 $($checkpoint.Key) ($($cp.CreatedAt))`n"
+        }
+    }
+    
+    if ($script:deploymentState.ErrorHistory.Count -gt 0) {
+        $report += "`nERROR HISTORY:`n"
+        foreach ($error in $script:deploymentState.ErrorHistory) {
+            $report += "  ✗ $($error.Name): $($error.Error)`n"
+        }
+    }
+    
+    $report += "`n========================================"
+    
+    return $report
 }
 
 function Write-StepProgress {
@@ -1505,13 +2005,29 @@ function Main {
     # Initialize logging
     Initialize-Logging
     
+    # Initialize idempotency and state management
+    try {
+        Initialize-DeploymentState
+        Write-Info "Idempotency system initialized"
+        if ($script:resumeFromStep -gt 0) {
+            Write-Info "Resuming from step: $(Get-StepName $script:resumeFromStep)"
+        }
+    } catch {
+        Write-WarningMsg "Failed to initialize state management: $_"
+        Write-Info "Continuing without idempotency features"
+    }
+    
     # Start timing
     $startTime = Get-Date
     Write-VerboseInfo "Setup started at: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))"
     
     try {
         # Initialize directories
-        Initialize-Directories
+        if ($script:resumeFromStep -le 0) {
+            Initialize-Directories
+        } else {
+            Write-VerboseInfo "Skipping directories step (already completed or resuming from later step)"
+        }
         
         # Check hardware
         $hardwareStatus = Test-IntelHardwareRequirements
