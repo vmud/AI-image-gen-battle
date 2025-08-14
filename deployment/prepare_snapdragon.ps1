@@ -237,18 +237,14 @@ function Install-Python {
             Write-VerboseInfo "Downloading Python installer (this may take a few minutes)..."
             $downloadStart = Get-Date
             
-            # Download with progress tracking
-            $webClient = New-Object System.Net.WebClient
-            $webClient.DownloadProgressChanged += {
-                if ($script:Verbose) {
-                    $percent = $_.ProgressPercentage
-                    $received = [math]::Round($_.BytesReceived / 1MB, 2)
-                    $total = [math]::Round($_.TotalBytesToReceive / 1MB, 2)
-                    Show-Spinner "Downloading: $($received)MB / $($total)MB ($percent%)"
-                }
+            # Download with simple progress tracking
+            Show-Spinner "Downloading Python installer"
+            try {
+                $webClient = New-Object System.Net.WebClient
+                $webClient.DownloadFile($pythonUrl, $installer)
+            } finally {
+                if ($webClient) { $webClient.Dispose() }
             }
-            
-            $webClient.DownloadFileTaskAsync($pythonUrl, $installer).Wait()
             Clear-Spinner
             
             $downloadTime = [math]::Round((Get-Date - $downloadStart).TotalSeconds, 1)
@@ -593,32 +589,15 @@ function Download-Models {
                 Write-VerboseInfo "Starting download of $($model.Name)..."
                 $downloadStart = Get-Date
                 
-                # Create web client with progress tracking
-                $webClient = New-Object System.Net.WebClient
-                $lastPercent = 0
-                
-                # Register event for progress updates
-                Register-ObjectEvent -InputObject $webClient -EventName DownloadProgressChanged -Action {
-                    if ($script:Verbose) {
-                        $percent = $Event.SourceEventArgs.ProgressPercentage
-                        $received = [math]::Round($Event.SourceEventArgs.BytesReceived / 1MB, 2)
-                        $total = [math]::Round($Event.SourceEventArgs.TotalBytesToReceive / 1MB, 2)
-                        
-                        # Update every 5% or on completion
-                        if ($percent -ge ($lastPercent + 5) -or $percent -eq 100) {
-                            Write-Host "`r  [v] Downloading: $($received)MB / $($total)MB ($percent%)" -NoNewline -ForegroundColor Yellow
-                            $lastPercent = $percent
-                        }
-                    }
-                } | Out-Null
-                
-                # Start download
-                $webClient.DownloadFileTaskAsync($model.URL, $outputFile).Wait()
-                
-                # Clear progress line
-                if ($script:Verbose) {
-                    Write-Host "`r" + (" " * 80) + "`r" -NoNewline
+                # Download with simple progress tracking
+                Show-Spinner "Downloading $($model.Name) ($($model.Size))"
+                try {
+                    $webClient = New-Object System.Net.WebClient
+                    $webClient.DownloadFile($model.URL, $outputFile)
+                } finally {
+                    if ($webClient) { $webClient.Dispose() }
                 }
+                Clear-Spinner
                 
                 $downloadTime = [math]::Round((Get-Date - $downloadStart).TotalSeconds, 1)
                 $downloadSpeed = [math]::Round(($model.SizeBytes / 1MB) / $downloadTime, 2)
