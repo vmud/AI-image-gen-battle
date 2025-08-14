@@ -227,7 +227,8 @@ function Install-Python {
     
     if (!$pythonFound -and !$CheckOnly) {
         Write-Info "Installing Python 3.10..."
-        $pythonUrl = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-arm64.exe"
+        # Note: Python doesn't provide ARM64 Windows installers. Using AMD64 installer which works on Snapdragon X Elite via emulation
+        $pythonUrl = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
         $installer = "C:\AIDemo\temp\python-installer.exe"
         
         Write-VerboseInfo "Download URL: $pythonUrl"
