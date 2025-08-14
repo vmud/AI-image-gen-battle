@@ -164,7 +164,7 @@ scp AI_Demo_Windows_Setup.zip administrator@[WINDOWS_IP]:/Users/Public/Desktop/
 # On your MacOS machine, scan local network:
 nmap -sn 192.168.1.0/24  # Adjust network range as needed
 # Or use:
-arp -a | grep -E "192\.168\.|10\."
+arp -a | grep -E "192\\.168\\.|10\\."
 ```
 """
     

@@ -14,12 +14,20 @@ This is a coordinated demonstration system that showcases Snapdragon X Elite's A
 
 ```
 AI-image-gen-battle/
-├── control-hub/           # MacOS coordination scripts
-├── windows-client/        # Windows client application with demo UI
-├── deployment/           # Automated setup scripts for fresh machines
-├── mockups/             # Visual mockups of client displays
-├── docs/                # Documentation and setup guides
-└── README.md
+├── src/                   # Source code
+│   ├── control-hub/       # MacOS coordination scripts
+│   └── windows-client/    # Windows client with AI generation
+├── deployment/            # Setup and deployment scripts
+│   ├── setup.ps1          # Main Windows setup (with logging)
+│   ├── monitor.ps1        # Real-time setup monitoring
+│   ├── diagnose.ps1       # DirectML troubleshooting
+│   ├── prepare_models.ps1 # AI model download/preparation
+│   └── verify.ps1         # Setup verification
+├── docs/                  # Documentation
+│   ├── AI_IMPLEMENTATION.md     # AI architecture details
+│   ├── MODEL_ACQUISITION_GUIDE.md # Model download guide
+│   └── PERFORMANCE_BENCHMARKS.md  # Expected performance
+└── mockups/               # UI design mockups
 ```
 
 ## Demo Flow

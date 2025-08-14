@@ -25,8 +25,9 @@ from PIL import Image, ImageTk
 import psutil
 import queue
 
-# Import our platform detection module
+# Import our platform detection and AI pipeline modules
 from platform_detection import PlatformDetector
+from ai_pipeline import AIImageGenerator
 
 class DemoDisplay:
     def __init__(self, platform_info: Dict[str, Any]):
@@ -36,11 +37,13 @@ class DemoDisplay:
         # Demo state
         self.demo_active = False
         self.current_step = 0
-        self.total_steps = 20
+        self.total_steps = 30  # Default for quality, will be adjusted based on model
         self.start_time = None
         self.end_time = None
         self.current_prompt = ""
         self.generated_image = None
+        self.generation_metrics = None
+        self.ai_generator = None  # Will be initialized on first use
         
         # Performance metrics
         self.cpu_usage = 0
@@ -405,27 +408,48 @@ class DemoDisplay:
         return True
         
     def run_generation(self):
-        """Run the actual image generation (simulated for now)."""
+        """Run the actual image generation using AI pipeline."""
         try:
-            # Simulate different generation speeds
-            if self.is_snapdragon:
-                # Snapdragon is faster due to NPU
-                step_delay = 0.4  # 8 seconds total for 20 steps
-            else:
-                # Intel takes longer
-                step_delay = 0.6  # 12 seconds total for 20 steps
+            # Initialize AI pipeline if not already done
+            if not hasattr(self, 'ai_generator'):
+                self.root.after_idle(lambda: self.status_label.config(text="Loading AI model...", fg='yellow'))
+                self.ai_generator = AIImageGenerator(self.platform_info)
             
-            for step in range(1, self.total_steps + 1):
+            # Progress callback for real-time updates
+            def progress_callback(progress, current_step, total_steps):
                 if not self.demo_active:
-                    break
-                    
-                self.current_step = step
-                progress = (step / self.total_steps) * 100
-                
-                # Update progress on UI thread
-                self.root.after_idle(self.update_progress, step, progress)
-                
-                time.sleep(step_delay)
+                    return
+                self.current_step = current_step
+                progress_percent = progress * 100
+                self.root.after_idle(self.update_progress, current_step, progress_percent)
+            
+            # Quality-focused settings based on platform
+            if self.is_snapdragon:
+                # Snapdragon with optimized models can do high quality faster
+                steps = 4 if "lightning" in str(self.ai_generator.model_path) else 30
+                resolution = (768, 768)  # Higher resolution for quality
+            else:
+                # Intel with DirectML - balance quality and speed
+                steps = 25
+                resolution = (768, 768)
+            
+            self.total_steps = steps
+            
+            # Generate the image
+            self.root.after_idle(lambda: self.status_label.config(text="Generating...", fg='yellow'))
+            
+            image, metrics = self.ai_generator.generate_image(
+                prompt=self.current_prompt,
+                steps=steps,
+                resolution=resolution,
+                guidance_scale=7.5,  # Higher for quality
+                seed=42,  # Fixed seed for reproducible demos
+                progress_callback=progress_callback
+            )
+            
+            # Store the generated image and metrics
+            self.generated_image = image
+            self.generation_metrics = metrics
             
             # Generation complete
             if self.demo_active:
@@ -455,7 +479,34 @@ class DemoDisplay:
         self.status_label.config(text="✅ COMPLETE!", fg='#00ff88')
         self.time_value.config(text=f"{elapsed_time:.1f}")
         
-        # Update image display
+        # Display the generated image
+        if hasattr(self, 'generated_image') and self.generated_image:
+            # Convert PIL image to PhotoImage for Tkinter
+            # Resize to fit the display area
+            display_size = (512, 512)
+            resized_image = self.generated_image.resize(display_size, Image.Resampling.LANCZOS)
+            photo = ImageTk.PhotoImage(resized_image)
+            
+            # Update the image display
+            self.image_label.config(image=photo)
+            self.image_label.image = photo  # Keep reference
+        
+        # Update image display with metrics
+        if hasattr(self, 'generation_metrics'):
+            metrics_text = (
+                f"✅ Generation Complete!\n"
+                f"Time: {elapsed_time:.1f}s\n"
+                f"Backend: {self.generation_metrics.get('backend', 'unknown')}\n"
+                f"Resolution: {self.generation_metrics.get('resolution', 'unknown')}\n"
+                f"Steps: {self.generation_metrics.get('steps', 'unknown')}\n"
+            )
+            if self.is_snapdragon:
+                metrics_text += f"NPU Usage: {self.generation_metrics.get('npu_utilization', 0):.1f}%"
+            else:
+                metrics_text += f"GPU Usage: {self.generation_metrics.get('gpu_utilization', 0):.1f}%"
+        else:
+            metrics_text = f"✅ Complete in {elapsed_time:.1f}s"
+        
         self.image_status.config(
             text=f"🏙️ Generated Image:\n\"{self.current_prompt}\"\n\nComplete AI-generated artwork\npowered by {'Snapdragon NPU' if self.is_snapdragon else 'Intel CPU + iGPU'}"
         )
