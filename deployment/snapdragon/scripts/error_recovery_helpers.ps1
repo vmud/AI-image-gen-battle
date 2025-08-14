@@ -640,12 +640,24 @@ function Test-ResourceAvailability {
     param(
         [int]$RequiredMemoryGB = 2,
         [int]$RequiredDiskGB = 3,
-        [int]$MaxCPUPercent = 90
+        [int]$MaxCPUPercent = 90,
+        [int]$RetryCount = 0,
+        [int]$MaxRetries = 3
     )
+    
+    # Prevent infinite recursion
+    if ($RetryCount -ge $MaxRetries) {
+        Write-WarningMsg "Resource check retry limit reached ($MaxRetries attempts). Continuing with available resources."
+        if ($script:config -and $script:config.Force) {
+            Write-VerboseInfo "Force mode enabled - proceeding despite resource constraints"
+            return $true
+        }
+        return $false
+    }
     
     $resources = @{
         Memory = @{
-            Available = [math]::Round((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory / 1MB / 1024, 2)
+            Available = [math]::Round((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory / 1MB, 2)
             Required = $RequiredMemoryGB
             OK = $false
         }
@@ -661,6 +673,11 @@ function Test-ResourceAvailability {
         }
     }
     
+    # Add diagnostic logging for memory calculation
+    Write-VerboseInfo "Resource check attempt $($RetryCount + 1)/$($MaxRetries + 1):"
+    Write-VerboseInfo "  Raw FreePhysicalMemory: $((Get-WmiObject Win32_OperatingSystem).FreePhysicalMemory) KB"
+    Write-VerboseInfo "  Calculated available memory: $($resources.Memory.Available) GB"
+    
     # Check each resource
     $resources.Memory.OK = $resources.Memory.Available -ge $resources.Memory.Required
     $resources.Disk.OK = $resources.Disk.Available -ge $resources.Disk.Required
@@ -669,25 +686,40 @@ function Test-ResourceAvailability {
     $allOK = $resources.Memory.OK -and $resources.Disk.OK -and $resources.CPU.OK
     
     if (-not $allOK) {
-        Write-WarningMsg "Resource constraints detected:"
+        Write-WarningMsg "Resource constraints detected (attempt $($RetryCount + 1)):"
         
         if (-not $resources.Memory.OK) {
             Write-WarningMsg "  Memory: $($resources.Memory.Available)GB available, $($resources.Memory.Required)GB required"
-            Clear-MemoryCache
+            if ($RetryCount -lt $MaxRetries) {
+                Clear-MemoryCache
+            }
         }
         
         if (-not $resources.Disk.OK) {
             Write-WarningMsg "  Disk: $($resources.Disk.Available)GB available, $($resources.Disk.Required)GB required"
-            Clear-TempFiles -RequiredGB ($resources.Disk.Required - $resources.Disk.Available)
+            if ($RetryCount -lt $MaxRetries) {
+                Clear-TempFiles -RequiredGB ($resources.Disk.Required - $resources.Disk.Available)
+            }
         }
         
         if (-not $resources.CPU.OK) {
             Write-WarningMsg "  CPU: $([math]::Round($resources.CPU.Usage))% usage, waiting for idle..."
-            Wait-ForCPUAvailability -MaxPercent $MaxCPUPercent
+            if ($RetryCount -lt $MaxRetries) {
+                Wait-ForCPUAvailability -MaxPercent $MaxCPUPercent
+            }
         }
         
-        # Re-check after cleanup
-        return Test-ResourceAvailability -RequiredMemoryGB $RequiredMemoryGB -RequiredDiskGB $RequiredDiskGB -MaxCPUPercent $MaxCPUPercent
+        # Add delay between retries to allow cleanup to take effect
+        if ($RetryCount -lt $MaxRetries) {
+            Write-VerboseInfo "Waiting 2 seconds for cleanup to take effect..."
+            Start-Sleep -Seconds 2
+            
+            # Re-check after cleanup with incremented retry count
+            return Test-ResourceAvailability -RequiredMemoryGB $RequiredMemoryGB -RequiredDiskGB $RequiredDiskGB -MaxCPUPercent $MaxCPUPercent -RetryCount ($RetryCount + 1) -MaxRetries $MaxRetries
+        } else {
+            Write-WarningMsg "Resource cleanup attempts exhausted. Proceeding with available resources."
+            return $false
+        }
     }
     
     Write-VerboseInfo "Resources OK - Memory: $($resources.Memory.Available)GB, Disk: $($resources.Disk.Available)GB, CPU: $([math]::Round($resources.CPU.Usage))%"
