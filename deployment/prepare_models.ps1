@@ -13,19 +13,33 @@ Write-Host "============================================" -ForegroundColor Cyan
 
 # Detect platform if auto
 if ($Platform -eq "auto") {
-    $processor = (Get-WmiObject -Class Win32_Processor).Name
-    if ($processor -like "*Snapdragon*" -or $processor -like "*Qualcomm*") {
-        $Platform = "snapdragon"
-    } else {
+    try {
+        # Use Get-CimInstance (modern replacement for Get-WmiObject)
+        $processor = (Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop).Name
+        if ($processor -like "*Snapdragon*" -or $processor -like "*Qualcomm*") {
+            $Platform = "snapdragon"
+        } else {
+            $Platform = "intel"
+        }
+        Write-Host "Detected platform: $Platform" -ForegroundColor Yellow
+    }
+    catch {
+        Write-Host "Warning: Could not detect processor type, defaulting to intel" -ForegroundColor Yellow
         $Platform = "intel"
     }
-    Write-Host "Detected platform: $Platform" -ForegroundColor Yellow
 }
 
 # Ensure Python environment is activated
 $venvPath = "C:\AIDemo\venv\Scripts\Activate.ps1"
 if (Test-Path $venvPath) {
-    & $venvPath
+    try {
+        & $venvPath
+        Write-Host "Virtual environment activated successfully" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "Warning: Could not activate virtual environment: $($_.Exception.Message)" -ForegroundColor Yellow
+        Write-Host "Continuing with system Python..." -ForegroundColor Yellow
+    }
 } else {
     Write-Host "Virtual environment not found. Please run setup_windows.ps1 first." -ForegroundColor Red
     exit 1
@@ -52,13 +66,31 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
 "@ -ForegroundColor Cyan
 
     # FORCE COMPLETE ENVIRONMENT REBUILD FOR COMPATIBILITY
-    Write-Host "🔄 REBUILDING ENVIRONMENT FOR NPU COMPATIBILITY..." -ForegroundColor Yellow
+    Write-Host ">> REBUILDING ENVIRONMENT FOR NPU COMPATIBILITY..." -ForegroundColor Yellow
     
     Write-Host "   Uninstalling conflicting packages..." -ForegroundColor Gray
-    pip uninstall -y torch torchvision diffusers transformers optimum huggingface_hub accelerate 2>$null
+    try {
+        pip uninstall -y torch torchvision diffusers transformers optimum huggingface_hub accelerate 2>$null | Out-Null
+        Write-Host "   [SUCCESS] Conflicting packages removed" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "   [WARNING] Some packages could not be uninstalled (continuing...)" -ForegroundColor Yellow
+    }
     
     Write-Host "   Installing PyTorch 2.1+ (REQUIRED for NPU)..." -ForegroundColor Yellow
-    pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu --quiet --force-reinstall
+    try {
+        pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu --quiet --force-reinstall
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "   [SUCCESS] PyTorch 2.1.2 installed" -ForegroundColor Green
+        } else {
+            throw "PyTorch installation failed with exit code $LASTEXITCODE"
+        }
+    }
+    catch {
+        Write-Host "   [ERROR] PyTorch installation failed: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "   [CRITICAL] Cannot proceed without PyTorch - exiting" -ForegroundColor Red
+        exit 1
+    }
     
     Write-Host "   Installing compatible HuggingFace ecosystem..." -ForegroundColor Yellow
     pip install huggingface_hub==0.20.3 --quiet --force-reinstall
@@ -77,19 +109,19 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
     Write-Host "   Attempting QNN installation for NPU support..." -ForegroundColor Gray
     $qnnInstalled = $false
     try {
-        pip install onnxruntime-qnn --quiet --no-warn-script-location 2>$null
+        pip install onnxruntime-qnn --quiet --no-warn-script-location 2>$null | Out-Null
         if ($LASTEXITCODE -eq 0) {
             $qnnInstalled = $true
-            Write-Host "   ✅ QNN runtime installed successfully" -ForegroundColor Green
+            Write-Host "   [SUCCESS] QNN runtime installed successfully" -ForegroundColor Green
         }
     } catch {
-        Write-Host "   ⚠️  QNN runtime not available, using ARM64 optimized version" -ForegroundColor Yellow
+        Write-Host "   [WARNING] QNN runtime not available, using ARM64 optimized version" -ForegroundColor Yellow
     }
     
     if (-not $qnnInstalled) {
         Write-Host "   Installing standard ARM64-optimized ONNX runtime..." -ForegroundColor Gray
         pip install onnxruntime optimum[onnxruntime] --quiet
-        Write-Host "   ✅ ARM64 ONNX runtime installed" -ForegroundColor Green
+        Write-Host "   [SUCCESS] ARM64 ONNX runtime installed" -ForegroundColor Green
     } else {
         pip install optimum[onnxruntime] --quiet
     }
@@ -97,58 +129,70 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
     
     # Download Qualcomm AI Hub CLI if not present (optional)
     Write-Host "Installing Qualcomm AI Hub tools (optional)..." -ForegroundColor Yellow
-    pip install qai-hub --quiet 2>$null
+    pip install qai-hub --quiet 2>$null | Out-Null
     
     # VERIFY CRITICAL PACKAGES ARE CORRECTLY INSTALLED
-    Write-Host "🔍 VERIFYING PACKAGE INSTALLATION..." -ForegroundColor Cyan
-    python -c "
+    Write-Host ">> VERIFYING PACKAGE INSTALLATION..." -ForegroundColor Cyan
+    $verifyScript = @'
 import sys
 try:
     import torch
-    print(f'✅ PyTorch: {torch.__version__}')
+    print(f'[OK] PyTorch: {torch.__version__}')
     if torch.__version__.startswith('2.0'):
-        print('❌ ERROR: PyTorch 2.0 detected - NPU requires 2.1+')
+        print('[ERROR] PyTorch 2.0 detected - NPU requires 2.1+')
         sys.exit(1)
         
     import transformers
-    print(f'✅ Transformers: {transformers.__version__}')
+    print(f'[OK] Transformers: {transformers.__version__}')
     
     import diffusers  
-    print(f'✅ Diffusers: {diffusers.__version__}')
+    print(f'[OK] Diffusers: {diffusers.__version__}')
     
     import optimum
-    print(f'✅ Optimum: {optimum.__version__}')
+    print(f'[OK] Optimum: {optimum.__version__}')
     
     import onnxruntime
-    print(f'✅ ONNX Runtime: {onnxruntime.__version__}')
+    print(f'[OK] ONNX Runtime: {onnxruntime.__version__}')
     
     providers = onnxruntime.get_available_providers()
     qnn_available = 'QNNExecutionProvider' in providers
-    print(f'🎯 QNN Provider: {qnn_available}')
+    print(f'[QNN] Provider Available: {qnn_available}')
     
-    print('🚀 ALL PACKAGES VERIFIED FOR NPU OPTIMIZATION')
+    print('[SUCCESS] ALL PACKAGES VERIFIED FOR NPU OPTIMIZATION')
     
 except ImportError as e:
-    print(f'❌ IMPORT ERROR: {e}')
+    print(f'[ERROR] IMPORT ERROR: {e}')
     sys.exit(1)
 except Exception as e:
-    print(f'❌ VERIFICATION ERROR: {e}')
+    print(f'[ERROR] VERIFICATION ERROR: {e}')
     sys.exit(1)
-"
+'@
+    
+    $tempVerifyPath = "$env:TEMP\verify_packages.py"
+    $verifyScript | Out-File -FilePath $tempVerifyPath -Encoding UTF8
+    python $tempVerifyPath
+    Remove-Item $tempVerifyPath -ErrorAction SilentlyContinue
     
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "❌ CRITICAL: Package verification failed" -ForegroundColor Red
+        Write-Host "X CRITICAL: Package verification failed" -ForegroundColor Red
         Write-Host "NPU optimization cannot proceed with current environment" -ForegroundColor Red
         exit 1
     }
-    Write-Host "✅ Package verification successful - NPU optimization ready" -ForegroundColor Green
+    Write-Host "[SUCCESS] Package verification successful - NPU optimization ready" -ForegroundColor Green
 
     Write-Host "`nAvailable ARM64-optimized models:" -ForegroundColor Yellow
-    Write-Host "1. SDXL-Turbo (1-4 steps, fast, ARM64-compatible)" -ForegroundColor White
-    Write-Host "2. SDXL-Base (30 steps, highest quality)" -ForegroundColor White
-    Write-Host "3. Simple fallback model (for testing)" -ForegroundColor White
+    Write-Host "1. SDXL-Turbo - 1-4 steps, fast, ARM64-compatible" -ForegroundColor White
+    Write-Host "2. SDXL-Base - 30 steps, highest quality" -ForegroundColor White
+    Write-Host "3. Simple fallback model - for testing" -ForegroundColor White
     
-    $choice = Read-Host "`nSelect model (1-3)"
+    # Initialize variables with defaults
+    $modelName = "sdxl-turbo"
+    $modelSteps = 1
+    $downloadScript = ""
+    
+    do {
+        $choice = Read-Host "`nSelect model (1-3)"
+    } while ($choice -notin @("1", "2", "3"))
     
     switch ($choice) {
         "1" {
@@ -206,7 +250,7 @@ def force_qnn_optimization():
             qnn_available = check_qnn_availability()
             
         if qnn_available:
-            print("✅ QNN Provider detected - proceeding with NPU optimization")
+            print("[SUCCESS] QNN Provider detected - proceeding with NPU optimization")
             
             # Convert with full NPU optimization
             print("Converting SDXL-Turbo with Snapdragon NPU optimization...")
@@ -232,7 +276,7 @@ def force_qnn_optimization():
             )
             
             pipeline.save_pretrained(str(output_path))
-            print(f"🚀 SNAPDRAGON NPU-OPTIMIZED MODEL READY: {output_path}")
+            print(f"[READY] SNAPDRAGON NPU-OPTIMIZED MODEL READY: {output_path}")
             print("This model will use Hexagon DSP for maximum performance!")
             return str(output_path)
             
@@ -240,18 +284,18 @@ def force_qnn_optimization():
             raise Exception("QNN Provider installation failed - NPU optimization not possible")
             
     except Exception as e:
-        print(f"❌ NPU optimization failed: {e}")
+        print(f"[ERROR] NPU optimization failed: {e}")
         print("This is a critical error for Snapdragon demo - NPU optimization is required")
         raise e
 
 # Execute NPU optimization
 try:
-    print("🎯 FORCING SNAPDRAGON NPU OPTIMIZATION...")
+    print("[FORCING] SNAPDRAGON NPU OPTIMIZATION...")
     result_path = force_qnn_optimization()
-    print(f"✅ SUCCESS: NPU-optimized model ready at: {result_path}")
+    print(f"[SUCCESS] NPU-optimized model ready at: {result_path}")
     
 except Exception as e:
-    print(f"💥 CRITICAL ERROR: {e}")
+    print(f"[CRITICAL] CRITICAL ERROR: {e}")
     print("Snapdragon NPU optimization failed - demo requirements not met")
     sys.exit(1)
 "@
@@ -311,7 +355,7 @@ def force_qnn_optimization():
             qnn_available = check_qnn_availability()
             
         if qnn_available:
-            print("✅ QNN Provider detected - proceeding with NPU optimization")
+            print("[SUCCESS] QNN Provider detected - proceeding with NPU optimization")
             
             # Convert with full NPU optimization for SDXL-Base (higher quality)
             print("Converting SDXL-Base with Snapdragon NPU optimization (15-20 minutes)...")
@@ -338,7 +382,7 @@ def force_qnn_optimization():
             )
             
             pipeline.save_pretrained(str(output_path))
-            print(f"🚀 SNAPDRAGON NPU-OPTIMIZED SDXL-BASE READY: {output_path}")
+            print(f"[READY] SNAPDRAGON NPU-OPTIMIZED SDXL-BASE READY: {output_path}")
             print("This model will use Hexagon DSP for maximum quality and performance!")
             return str(output_path)
             
@@ -346,18 +390,18 @@ def force_qnn_optimization():
             raise Exception("QNN Provider installation failed - NPU optimization not possible")
             
     except Exception as e:
-        print(f"❌ NPU optimization failed: {e}")
+        print(f"[ERROR] NPU optimization failed: {e}")
         print("This is a critical error for Snapdragon demo - NPU optimization is required")
         raise e
 
 # Execute NPU optimization for SDXL-Base
 try:
-    print("🎯 FORCING SNAPDRAGON NPU OPTIMIZATION FOR SDXL-BASE...")
+    print("[FORCING] SNAPDRAGON NPU OPTIMIZATION FOR SDXL-BASE...")
     result_path = force_qnn_optimization()
-    print(f"✅ SUCCESS: NPU-optimized SDXL-Base ready at: {result_path}")
+    print(f"[SUCCESS] NPU-optimized SDXL-Base ready at: {result_path}")
     
 except Exception as e:
-    print(f"💥 CRITICAL ERROR: {e}")
+    print(f"[CRITICAL] CRITICAL ERROR: {e}")
     print("Snapdragon NPU optimization failed - demo requirements not met")
     sys.exit(1)
 "@
@@ -427,13 +471,27 @@ except Exception as e:
     
     # Save and run the download script
     $scriptPath = "$env:TEMP\download_snapdragon_model.py"
-    $downloadScript | Out-File -FilePath $scriptPath -Encoding UTF8
+    try {
+        $downloadScript | Out-File -FilePath $scriptPath -Encoding UTF8
+        Write-Host "Downloading and optimizing model (this may take 10-15 minutes)..." -ForegroundColor Yellow
+        Write-Host "Progress will be shown during model conversion..." -ForegroundColor Cyan
+        
+        python $scriptPath
+        $pythonExitCode = $LASTEXITCODE
+    }
+    catch {
+        Write-Host "[ERROR] Failed to create or execute Python script: $($_.Exception.Message)" -ForegroundColor Red
+        $pythonExitCode = 1
+    }
+    finally {
+        # Always clean up temporary files
+        if (Test-Path $scriptPath) {
+            Remove-Item $scriptPath -ErrorAction SilentlyContinue
+        }
+    }
     
-    Write-Host "Downloading and optimizing model (this may take 10-15 minutes)..." -ForegroundColor Yellow
-    python $scriptPath
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n🚀 SNAPDRAGON NPU OPTIMIZATION COMPLETE!" -ForegroundColor Green
+    if ($pythonExitCode -eq 0) {
+        Write-Host "`n[COMPLETE] SNAPDRAGON NPU OPTIMIZATION COMPLETE!" -ForegroundColor Green
         Write-Host "Model: $modelName" -ForegroundColor White
         Write-Host "Inference steps: $modelSteps" -ForegroundColor White
         Write-Host "Hexagon DSP acceleration: ENABLED" -ForegroundColor Cyan
@@ -460,19 +518,17 @@ except Exception as e:
         
         # Verify NPU optimization was achieved
         if ($actualOptimization -eq "NPU (Hexagon)") {
-            Write-Host "`n🎯 SUCCESS: Full Snapdragon NPU optimization achieved!" -ForegroundColor Green
+            Write-Host "`n[SUCCESS] Full Snapdragon NPU optimization achieved!" -ForegroundColor Green
             Write-Host "Demo is ready for maximum performance comparison" -ForegroundColor Green
         } else {
-            Write-Host "`n⚠️  WARNING: NPU optimization not achieved" -ForegroundColor Yellow
+            Write-Host "`n[WARNING] NPU optimization not achieved" -ForegroundColor Yellow
             Write-Host "Demo will not show full Snapdragon advantage" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "❌ CRITICAL: NPU model preparation failed" -ForegroundColor Red
+        Write-Host "[CRITICAL] NPU model preparation failed" -ForegroundColor Red
         Write-Host "Snapdragon demo requirements not met" -ForegroundColor Red
         exit 1
     }
-    
-    Remove-Item $scriptPath -ErrorAction SilentlyContinue
     
 } else {
     # Intel platform
@@ -525,32 +581,45 @@ try:
         resume_download=True
     )
     
-    print("\n✅ Models downloaded successfully!")
+    print("\n[SUCCESS] Models downloaded successfully!")
     print(f"Location: {local_dir}")
     
 except ImportError as e:
-    print(f"❌ Import error: {e}")
+    print(f"[ERROR] Import error: {e}")
     sys.exit(1)
 except Exception as e:
-    print(f"❌ Download failed: {e}")
+    print(f"[ERROR] Download failed: {e}")
     sys.exit(1)
 "@
 
     $scriptPath = "$env:TEMP\download_intel_model.py"
-    $downloadScript | Out-File -FilePath $scriptPath -Encoding UTF8
+    try {
+        $downloadScript | Out-File -FilePath $scriptPath -Encoding UTF8
+        Write-Host "Downloading SDXL model (6.9GB - this will take several minutes)..." -ForegroundColor Yellow
+        Write-Host "Please be patient, large model download in progress..." -ForegroundColor Cyan
+        
+        python $scriptPath
+        $pythonExitCode = $LASTEXITCODE
+    }
+    catch {
+        Write-Host "[ERROR] Failed to create or execute Python script: $($_.Exception.Message)" -ForegroundColor Red
+        $pythonExitCode = 1
+    }
+    finally {
+        # Always clean up temporary files
+        if (Test-Path $scriptPath) {
+            Remove-Item $scriptPath -ErrorAction SilentlyContinue
+        }
+    }
     
-    Write-Host "Downloading SDXL model (6.9GB - this will take several minutes)..." -ForegroundColor Yellow
-    python $scriptPath
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n✅ Intel models ready!" -ForegroundColor Green
+    if ($pythonExitCode -eq 0) {
+        Write-Host "`n[SUCCESS] Intel models ready!" -ForegroundColor Green
         Write-Host "Model: SDXL-Base 1.0 with DirectML acceleration" -ForegroundColor White
         Write-Host "Location: C:\AIDemo\models\sdxl-base-1.0" -ForegroundColor White
     } else {
-        Write-Host "❌ Model download failed" -ForegroundColor Red
+        Write-Host "[ERROR] Model download failed" -ForegroundColor Red
+        Write-Host "Please check your internet connection and try again" -ForegroundColor Yellow
     }
-    
-    Remove-Item $scriptPath -ErrorAction SilentlyContinue
 }
 
 Write-Host "`n============================================" -ForegroundColor Cyan
@@ -560,8 +629,15 @@ Write-Host "============================================" -ForegroundColor Cyan
 # Create a config file with model settings
 $configPath = "C:\AIDemo\models\config.json"
 
-# Set model path based on platform and what was actually created
-if ($Platform -eq "snapdragon") {
+try {
+    # Ensure models directory exists
+    $modelsDir = Split-Path $configPath -Parent
+    if (-not (Test-Path $modelsDir)) {
+        New-Item -ItemType Directory -Path $modelsDir -Force | Out-Null
+    }
+
+    # Set model path based on platform and what was actually created
+    if ($Platform -eq "snapdragon") {
     # Detect what optimization level was achieved
     if (Test-Path "C:\AIDemo\models\sdxl_turbo_npu_optimized") {
         $modelPath = "sdxl_turbo_npu_optimized"
@@ -597,7 +673,13 @@ $config = @{
     optimizations = $optimizations
 }
 
-$config | ConvertTo-Json | Out-File -FilePath $configPath -Encoding UTF8
-
-Write-Host "`nConfiguration saved to: $configPath" -ForegroundColor Yellow
-Write-Host "`nYour system is now ready for high-quality AI image generation!" -ForegroundColor Green
+    $config | ConvertTo-Json | Out-File -FilePath $configPath -Encoding UTF8
+    
+    Write-Host "`nConfiguration saved to: $configPath" -ForegroundColor Yellow
+    Write-Host "`nYour system is now ready for high-quality AI image generation!" -ForegroundColor Green
+}
+catch {
+    Write-Host "[ERROR] Failed to create configuration file: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "Please ensure you have write permissions to C:\AIDemo\models\" -ForegroundColor Yellow
+    exit 1
+}
