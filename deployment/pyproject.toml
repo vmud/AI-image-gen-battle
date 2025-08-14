@@ -12,7 +12,7 @@ torch = {version = "2.1.2", source = "pytorch-cpu"}
 torchvision = {version = "0.16.2", source = "pytorch-cpu"}
 
 # HuggingFace Ecosystem - Compatible versions for stable operation
-huggingface_hub = "0.20.3"
+huggingface_hub = "0.24.6"
 transformers = "4.36.2"
 diffusers = "0.25.1"
 accelerate = "0.25.0"

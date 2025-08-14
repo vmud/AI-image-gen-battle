@@ -34,7 +34,7 @@ The required Python packages weren't installed properly during the Poetry/pip se
 ```powershell
 # Install core packages manually
 pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
-pip install diffusers==0.25.1 transformers==4.36.2 huggingface_hub==0.20.3
+pip install diffusers==0.25.1 transformers==4.36.2 huggingface_hub==0.24.6
 pip install accelerate==0.25.0 safetensors==0.4.1
 pip install optimum[onnxruntime]==1.16.2
 ```
@@ -108,6 +108,16 @@ python --version  # Should be 3.9.x or 3.10.x
 # Clean install
 pip uninstall torch torchvision diffusers transformers optimum -y
 .\install_dependencies.ps1 -Force
+```
+
+### Issue: "ImportError: cannot import name DDUFEntry from huggingface_hub"
+**Solution:** This occurs when huggingface_hub version is incompatible. Fix with:
+```powershell
+# Quick fix for DDUFEntry import error
+.\fix_huggingface_import.ps1
+
+# Or manual fix:
+pip install --upgrade huggingface_hub==0.24.6
 ```
 
 ### Issue: Different Python environment

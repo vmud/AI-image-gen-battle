@@ -239,7 +239,7 @@ torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
 
 # HuggingFace Ecosystem - Compatible versions
-huggingface_hub==0.20.3
+huggingface_hub==0.24.6
 transformers==4.36.2
 diffusers==0.25.1
 accelerate==0.25.0
