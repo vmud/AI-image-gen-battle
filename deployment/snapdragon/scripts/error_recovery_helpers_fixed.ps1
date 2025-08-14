@@ -516,7 +516,7 @@ function Install-PackageWithFallback {
     )
     
     # Get architecture info
-    $archInfo = Get-ProcessorArchitecture()
+    $archInfo = Get-ProcessorArchitecture
     Write-VerboseInfo "Architecture: $($archInfo.Architecture), ARM: $($archInfo.IsARM)"
     
     $installMethods = @(
