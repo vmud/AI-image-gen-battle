@@ -17,7 +17,7 @@ Write-Host "============================================" -ForegroundColor Cyan
 function Test-PythonPackage {
     param([string]$PackageName)
     try {
-        python -c "import $PackageName; print('✓ ' + '$PackageName' + ' available')" 2>$null
+        python -c "import $PackageName; print('Package available: ' + '$PackageName')" 2>$null
         return $LASTEXITCODE -eq 0
     } catch {
         return $false
