@@ -54,17 +54,42 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
     # First ensure all required packages are installed
     Write-Host "Checking and installing required packages for ARM64..." -ForegroundColor Yellow
     
-    # Install core AI libraries first
+    # Install core AI libraries with compatible versions
     Write-Host "Installing diffusers and dependencies..." -ForegroundColor Yellow
-    pip install diffusers==0.21.4 transformers==4.30.0 accelerate==0.20.3 safetensors==0.3.1 --quiet
     
-    # Install torch for ARM64 (CPU version)
-    Write-Host "Installing PyTorch for ARM64..." -ForegroundColor Yellow  
-    pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cpu --quiet
+    # Upgrade huggingface_hub first to fix cached_download issue
+    pip install --upgrade huggingface_hub --quiet
     
-    # Install ONNX runtime with QNN support for NPU
-    Write-Host "Installing ONNX runtime with Snapdragon NPU support..." -ForegroundColor Yellow
-    pip install onnxruntime-qnn optimum[onnxruntime] --quiet
+    # Install compatible versions for ARM64
+    pip install diffusers>=0.24.0 transformers>=4.35.0 accelerate>=0.20.3 safetensors>=0.3.1 --quiet
+    
+    # Install torch for ARM64 (ensure 2.1+ for optimum compatibility)
+    Write-Host "Installing PyTorch 2.1+ for ARM64..." -ForegroundColor Yellow  
+    pip install torch>=2.1.0 torchvision>=0.16.0 --index-url https://download.pytorch.org/whl/cpu --quiet
+    
+    # Install ONNX runtime with ARM64 optimization
+    Write-Host "Installing ONNX runtime with ARM64 optimization..." -ForegroundColor Yellow
+    
+    # Try QNN first, fallback to standard ARM64 optimized runtime
+    Write-Host "   Attempting QNN installation for NPU support..." -ForegroundColor Gray
+    $qnnInstalled = $false
+    try {
+        pip install onnxruntime-qnn --quiet --no-warn-script-location 2>$null
+        if ($LASTEXITCODE -eq 0) {
+            $qnnInstalled = $true
+            Write-Host "   ✅ QNN runtime installed successfully" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "   ⚠️  QNN runtime not available, using ARM64 optimized version" -ForegroundColor Yellow
+    }
+    
+    if (-not $qnnInstalled) {
+        Write-Host "   Installing standard ARM64-optimized ONNX runtime..." -ForegroundColor Gray
+        pip install onnxruntime optimum[onnxruntime] --quiet
+        Write-Host "   ✅ ARM64 ONNX runtime installed" -ForegroundColor Green
+    } else {
+        pip install optimum[onnxruntime] --quiet
+    }
     
     # Install huggingface hub for model downloads
     pip install huggingface-hub --quiet
@@ -86,71 +111,103 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
             $modelSteps = 1
             Write-Host "`nDownloading SDXL-Turbo for ARM64..." -ForegroundColor Yellow
             
-            # Create NPU-optimized Python script for Snapdragon
+            # Create robust NPU-optimized Python script for Snapdragon
             $downloadScript = @"
 import os
 import sys
 from pathlib import Path
 
-try:
-    from optimum.onnxruntime import ORTStableDiffusionXLPipeline
-    import torch
-    
-    print("Downloading and optimizing SDXL-Turbo for Snapdragon NPU...")
-    
+def check_qnn_availability():
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        qnn_available = 'QNNExecutionProvider' in providers
+        print(f"Available ONNX providers: {providers}")
+        print(f"QNN Provider available: {qnn_available}")
+        return qnn_available
+    except Exception as e:
+        print(f"Error checking QNN availability: {e}")
+        return False
+
+def force_qnn_optimization():
+    '''Force NPU optimization - this is required for Snapdragon demo'''
     models_dir = Path("C:/AIDemo/models")
     models_dir.mkdir(exist_ok=True, parents=True)
     
-    # Download and convert to ONNX with NPU optimization
-    output_path = models_dir / "sdxl_turbo_npu_optimized"
-    
-    print("Converting SDXL-Turbo to NPU-optimized ONNX format...")
-    pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
-        "stabilityai/sdxl-turbo",
-        export=True,
-        provider="QNNExecutionProvider",
-        export_dir=str(output_path),
-        torch_dtype=torch.float16,
-        use_safetensors=True,
-        # NPU-specific optimizations
-        provider_options={
-            "backend_path": "QnnHtp.dll",
-            "device_id": 0,
-            "enable_htp_fp16_precision": True
-        }
-    )
-    
-    # Save the NPU-optimized model
-    pipeline.save_pretrained(str(output_path))
-    
-    print(f"SDXL-Turbo NPU-optimized model ready at: {output_path}")
-    print("Model is configured for Snapdragon NPU acceleration")
-    
-except ImportError as e:
-    print(f"Import error: {e}")
-    print("Installing missing dependencies...")
-    import subprocess
-    subprocess.run([sys.executable, "-m", "pip", "install", "optimum[onnxruntime]", "onnxruntime-qnn"])
-    # Retry with basic download if ONNX conversion fails
     try:
+        # Import and verify all required packages
+        print("Importing required packages for NPU optimization...")
         from optimum.onnxruntime import ORTStableDiffusionXLPipeline
-        pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
-            "stabilityai/sdxl-turbo",
-            export=True,
-            provider="QNNExecutionProvider",
-            export_dir=str(output_path)
-        )
-        pipeline.save_pretrained(str(output_path))
-        print("NPU-optimized model created successfully")
-    except Exception as retry_e:
-        print(f"NPU optimization failed, using fallback: {retry_e}")
-        from huggingface_hub import snapshot_download
-        output_path = models_dir / "sdxl-turbo"
-        snapshot_download("stabilityai/sdxl-turbo", local_dir=str(output_path))
-        print("Standard model downloaded - NPU optimization requires manual setup")
+        import torch
+        import onnxruntime as ort
+        
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"ONNX Runtime version: {ort.__version__}")
+        
+        # Check QNN availability 
+        qnn_available = check_qnn_availability()
+        
+        if not qnn_available:
+            print("ERROR: QNN Provider not detected!")
+            print("Installing QNN runtime...")
+            import subprocess
+            result = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "onnxruntime-qnn"], 
+                                  capture_output=True, text=True)
+            print(f"QNN install result: {result.returncode}")
+            if result.stdout: print(f"stdout: {result.stdout}")
+            if result.stderr: print(f"stderr: {result.stderr}")
+            
+            # Re-check after installation
+            qnn_available = check_qnn_availability()
+            
+        if qnn_available:
+            print("✅ QNN Provider detected - proceeding with NPU optimization")
+            
+            # Convert with full NPU optimization
+            print("Converting SDXL-Turbo with Snapdragon NPU optimization...")
+            output_path = models_dir / "sdxl_turbo_npu_optimized"
+            
+            # Use provider options optimized for Snapdragon X Elite
+            provider_options = {
+                "backend_path": "QnnHtp.dll",
+                "device_id": 0,
+                "enable_htp_fp16_precision": True,
+                "qnn_context_priority": "high",
+                "qnn_saver_path": str(output_path / "qnn_cache")
+            }
+            
+            pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
+                "stabilityai/sdxl-turbo",
+                export=True,
+                provider="QNNExecutionProvider",
+                export_dir=str(output_path),
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+                provider_options=provider_options
+            )
+            
+            pipeline.save_pretrained(str(output_path))
+            print(f"🚀 SNAPDRAGON NPU-OPTIMIZED MODEL READY: {output_path}")
+            print("This model will use Hexagon DSP for maximum performance!")
+            return str(output_path)
+            
+        else:
+            raise Exception("QNN Provider installation failed - NPU optimization not possible")
+            
+    except Exception as e:
+        print(f"❌ NPU optimization failed: {e}")
+        print("This is a critical error for Snapdragon demo - NPU optimization is required")
+        raise e
+
+# Execute NPU optimization
+try:
+    print("🎯 FORCING SNAPDRAGON NPU OPTIMIZATION...")
+    result_path = force_qnn_optimization()
+    print(f"✅ SUCCESS: NPU-optimized model ready at: {result_path}")
     
 except Exception as e:
-    print(f"Error: {e}")
+    print(f"💥 CRITICAL ERROR: {e}")
+    print("Snapdragon NPU optimization failed - demo requirements not met")
     sys.exit(1)
 "@
         }
@@ -298,19 +355,43 @@ except Exception as e:
     python $scriptPath
     
     if ($LASTEXITCODE -eq 0) {
-        Write-Host "`n✅ NPU-optimized model ready!" -ForegroundColor Green
+        Write-Host "`n🚀 SNAPDRAGON NPU OPTIMIZATION COMPLETE!" -ForegroundColor Green
         Write-Host "Model: $modelName" -ForegroundColor White
         Write-Host "Inference steps: $modelSteps" -ForegroundColor White
-        Write-Host "NPU acceleration: ENABLED" -ForegroundColor Cyan
-        $modelLocation = switch ($modelName) {
-            "sdxl-turbo" { "C:\AIDemo\models\sdxl_turbo_npu_optimized" }
-            "sdxl-base" { "C:\AIDemo\models\sdxl_base_npu_optimized" }
-            "npu-test" { "C:\AIDemo\models\npu_test_config.json" }
-            default { "C:\AIDemo\models\$modelName" }
+        Write-Host "Hexagon DSP acceleration: ENABLED" -ForegroundColor Cyan
+        # Determine actual model location based on what was created
+        $modelLocation = "C:\AIDemo\models\"
+        if (Test-Path "C:\AIDemo\models\sdxl_turbo_npu_optimized") {
+            $modelLocation += "sdxl_turbo_npu_optimized"
+            $actualOptimization = "NPU (Hexagon)"
+        } elseif (Test-Path "C:\AIDemo\models\sdxl_turbo_arm64_optimized") {
+            $modelLocation += "sdxl_turbo_arm64_optimized"  
+            $actualOptimization = "ARM64 CPU"
+        } elseif (Test-Path "C:\AIDemo\models\sdxl_base_npu_optimized") {
+            $modelLocation += "sdxl_base_npu_optimized"
+            $actualOptimization = "NPU (Hexagon)"
+        } elseif (Test-Path "C:\AIDemo\models\npu_test_config.json") {
+            $modelLocation += "npu_test_config.json"
+            $actualOptimization = "Test Config"
+        } else {
+            $modelLocation += $modelName
+            $actualOptimization = "Standard"
         }
+        Write-Host "Optimization: $actualOptimization" -ForegroundColor Cyan
         Write-Host "Location: $modelLocation" -ForegroundColor White
+        
+        # Verify NPU optimization was achieved
+        if ($actualOptimization -eq "NPU (Hexagon)") {
+            Write-Host "`n🎯 SUCCESS: Full Snapdragon NPU optimization achieved!" -ForegroundColor Green
+            Write-Host "Demo is ready for maximum performance comparison" -ForegroundColor Green
+        } else {
+            Write-Host "`n⚠️  WARNING: NPU optimization not achieved" -ForegroundColor Yellow
+            Write-Host "Demo will not show full Snapdragon advantage" -ForegroundColor Yellow
+        }
     } else {
-        Write-Host "❌ NPU model preparation failed" -ForegroundColor Red
+        Write-Host "❌ CRITICAL: NPU model preparation failed" -ForegroundColor Red
+        Write-Host "Snapdragon demo requirements not met" -ForegroundColor Red
+        exit 1
     }
     
     Remove-Item $scriptPath -ErrorAction SilentlyContinue
@@ -401,15 +482,30 @@ Write-Host "============================================" -ForegroundColor Cyan
 # Create a config file with model settings
 $configPath = "C:\AIDemo\models\config.json"
 
-# Set model path based on platform and model choice
+# Set model path based on platform and what was actually created
 if ($Platform -eq "snapdragon") {
-    $modelPath = switch ($modelName) {
-        "sdxl-turbo" { "sdxl_turbo_npu_optimized" }
-        "sdxl-base" { "sdxl_base_npu_optimized" }
-        "npu-test" { "npu_test_config.json" }
-        default { "sdxl_turbo_npu_optimized" }
+    # Detect what optimization level was achieved
+    if (Test-Path "C:\AIDemo\models\sdxl_turbo_npu_optimized") {
+        $modelPath = "sdxl_turbo_npu_optimized"
+        $optimizations = @("npu", "qnn_provider", "fp16", "hexagon_dsp")
+    } elseif (Test-Path "C:\AIDemo\models\sdxl_turbo_arm64_optimized") {
+        $modelPath = "sdxl_turbo_arm64_optimized"
+        $optimizations = @("arm64", "cpu_optimized", "fp32")
+    } elseif (Test-Path "C:\AIDemo\models\sdxl_base_npu_optimized") {
+        $modelPath = "sdxl_base_npu_optimized"
+        $optimizations = @("npu", "qnn_provider", "fp16", "hexagon_dsp")
+    } elseif (Test-Path "C:\AIDemo\models\npu_test_config.json") {
+        $modelPath = "npu_test_config.json"
+        $optimizations = @("test_config")
+    } else {
+        # Fallback to standard model
+        $modelPath = switch ($modelName) {
+            "sdxl-turbo" { "sdxl-turbo" }
+            "sdxl-base" { "sdxl-base-1.0" }
+            default { "sdxl-turbo" }
+        }
+        $optimizations = @("arm64", "standard")
     }
-    $optimizations = @("npu", "qnn_provider", "fp16", "hexagon_dsp")
 } else {
     $modelPath = "sdxl-base-1.0"
     $optimizations = @("directml", "fp16")
