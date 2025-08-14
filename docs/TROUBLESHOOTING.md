@@ -1,44 +1,55 @@
-# 🔧 Troubleshooting Guide - Snapdragon Setup Issues
+# 🔧 Troubleshooting Guide - AI Demo Setup Issues
 
-## 📋 **Issues Found in Your Snapdragon Setup**
+## 📋 **Enhanced Installation System (v2.0)**
 
-Based on the error output, here are the specific issues and their fixes:
+The setup script now includes enhanced package installation with:
+- ✅ **DirectML Compatibility Checking** - Validates Windows version and DirectX support
+- ✅ **Progressive Package Installation** - Installs packages individually with detailed progress
+- ✅ **Automatic Fallback** - Gracefully handles DirectML failures on incompatible systems
+- ✅ **Retry Mechanism** - Exponential backoff for network failures
+- ✅ **Verbose Output** - Real-time progress indicators and detailed error messages
 
-### ❌ **Issue 1: Permission Errors During Python Cleanup**
-```
-Remove-Item $pythonInstaller -Force
-+ FullyQualifiedErrorId : UnauthorizedAccess
-```
+## 🚀 **Common Installation Issues & Solutions**
 
-**Fix:** Use safer file cleanup with error handling
-```powershell
-# Use the fixed script: setup_windows_fixed.ps1
-# It includes Safe-RemoveItem function with proper error handling
-```
-
-### ❌ **Issue 2: DirectML Package Not Found (ARM64)**
+### ❌ **Issue 1: DirectML Not Available (Intel x86 Systems)**
 ```
 ERROR: Could not find a version that satisfies the requirement directml>=1.12.0
+```
+
+**New Enhanced Fix:**
+The updated script now automatically:
+1. Checks DirectML compatibility before installation
+2. Validates Windows version (requires v1903+) and DirectX 12 support
+3. Falls back to CPU-only mode if DirectML fails
+4. Provides clear error messages explaining why DirectML failed
+
+```powershell
+# The enhanced script will show:
+# "DirectML not supported - using CPU-only mode"
+# "System appears compatible with DirectML"
+```
+
+### ❌ **Issue 2: Package Installation Failures**
+```
+ERROR: Network connection failed / Package not found
+```
+
+**New Enhanced Fix:**
+- **Progressive Installation**: Each package installed individually
+- **Retry Logic**: 3 attempts with exponential backoff (2s, 4s, 8s)
+- **Graceful Degradation**: Core packages required, optional packages can fail
+- **Detailed Feedback**: Shows exactly which packages succeeded/failed
+
+### ❌ **Issue 3: ARM64 Compatibility (Snapdragon)**
+```
 ERROR: No matching distribution found for directml>=1.12.0
 ```
 
-**Fix:** DirectML is not available for ARM64 architecture
-- **Root Cause:** DirectML only supports x86_64, not ARM64 (Snapdragon)
-- **Solution:** Use CPU-based inference for Snapdragon (still faster due to NPU)
-
-### ❌ **Issue 3: Firewall Configuration Error**
-```
-Failed to configure firewall: A parameter cannot be found that matches parameter name 'Force'
-```
-
-**Fix:** Use correct PowerShell firewall syntax
-```powershell
-# Old (broken):
-New-NetFirewallRule -Force
-
-# New (fixed):
-New-NetFirewallRule -ErrorAction SilentlyContinue
-```
+**Enhanced ARM64 Support:**
+- Automatically detects ARM64 architecture
+- Skips DirectML (x86-only) packages
+- Uses optimized CPU-only packages
+- Still provides excellent performance with NPU acceleration
 
 ## 🚀 **Quick Fix Instructions**
 

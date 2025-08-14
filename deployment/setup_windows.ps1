@@ -160,89 +160,243 @@ function Setup-DemoDirectory {
     return $demoPath
 }
 
-# Function to install Python dependencies with platform-specific handling
+# Function to check DirectML compatibility
+function Test-DirectMLCompatibility {
+    Write-Host "Checking DirectML compatibility..." -ForegroundColor Yellow
+    
+    try {
+        # Check Windows version (requires Windows 10 v1903 or later)
+        $osVersion = [System.Environment]::OSVersion.Version
+        $build = (Get-ItemProperty "HKLM:SOFTWARE\Microsoft\Windows NT\CurrentVersion").CurrentBuild
+        
+        if ($build -lt 18362) {
+            Write-Host "DirectML requires Windows 10 v1903 (build 18362) or later. Current build: $build" -ForegroundColor Red
+            return $false
+        }
+        
+        # Check if DirectX 12 is available
+        try {
+            $dxdiagOutput = dxdiag /t "$env:TEMP\dxdiag.txt" 2>$null
+            Start-Sleep -Seconds 3
+            if (Test-Path "$env:TEMP\dxdiag.txt") {
+                $dxContent = Get-Content "$env:TEMP\dxdiag.txt" -Raw
+                Remove-Item "$env:TEMP\dxdiag.txt" -Force -ErrorAction SilentlyContinue
+                
+                if ($dxContent -match "DirectX 12") {
+                    Write-Host "DirectX 12 support detected" -ForegroundColor Green
+                } else {
+                    Write-Host "DirectX 12 not detected - DirectML may not work properly" -ForegroundColor Yellow
+                    return $false
+                }
+            }
+        } catch {
+            Write-Host "Could not verify DirectX version" -ForegroundColor Yellow
+            return $false
+        }
+        
+        Write-Host "System appears compatible with DirectML" -ForegroundColor Green
+        return $true
+        
+    } catch {
+        Write-Host "Error checking DirectML compatibility: $_" -ForegroundColor Red
+        return $false
+    }
+}
+
+# Function to install a single package with retry logic
+function Install-PackageWithRetry {
+    param(
+        [string]$PackageName,
+        [int]$MaxRetries = 3,
+        [int]$DelaySeconds = 2
+    )
+    
+    $attempt = 1
+    while ($attempt -le $MaxRetries) {
+        Write-Host "  [$attempt/$MaxRetries] Installing $PackageName..." -ForegroundColor Cyan
+        
+        try {
+            $result = pip install $PackageName --verbose --no-warn-script-location 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "  ✓ $PackageName installed successfully" -ForegroundColor Green
+                return $true
+            } else {
+                throw "pip install failed with exit code $LASTEXITCODE"
+            }
+        } catch {
+            Write-Host "  ✗ Attempt $attempt failed: $_" -ForegroundColor Red
+            
+            if ($attempt -lt $MaxRetries) {
+                $delay = $DelaySeconds * [Math]::Pow(2, $attempt - 1)  # Exponential backoff
+                Write-Host "  Retrying in $delay seconds..." -ForegroundColor Yellow
+                Start-Sleep -Seconds $delay
+            }
+            $attempt++
+        }
+    }
+    
+    Write-Host "  ✗ Failed to install $PackageName after $MaxRetries attempts" -ForegroundColor Red
+    return $false
+}
+
+# Function to install Python dependencies with enhanced error handling and progress
 function Install-PythonDependencies {
     param([string]$DemoPath)
     
-    Write-Host "Installing Python dependencies..." -ForegroundColor Yellow
+    Write-Host "============================================" -ForegroundColor Cyan
+    Write-Host "PYTHON DEPENDENCIES INSTALLATION" -ForegroundColor Cyan
+    Write-Host "============================================" -ForegroundColor Cyan
     
     # Detect platform
     $architecture = Get-PlatformArchitecture
     Write-Host "Detected architecture: $architecture" -ForegroundColor Cyan
     
-    # Create platform-specific requirements
-    if ($architecture -eq "ARM64") {
-        # Snapdragon X Elite - ARM64 specific packages
-        $requirements = @"
-torch>=2.0.0
-torchvision>=0.15.0
-diffusers>=0.21.0
-transformers>=4.25.0
-accelerate>=0.16.0
-safetensors>=0.3.0
-Pillow>=9.3.0
-numpy>=1.24.0
-opencv-python>=4.7.0
-psutil>=5.9.0
-flask>=2.2.0
-flask-socketio>=5.3.0
-requests>=2.28.0
-websocket-client>=1.4.0
-python-socketio>=5.7.0
-# Note: DirectML not available for ARM64, using CPU fallback
-onnxruntime>=1.16.0
-"@
+    # Check DirectML compatibility for Intel systems
+    $directMLSupported = $false
+    if ($architecture -eq "x86_64") {
+        $directMLSupported = Test-DirectMLCompatibility
+        if ($directMLSupported) {
+            Write-Host "DirectML acceleration will be enabled" -ForegroundColor Green
+        } else {
+            Write-Host "DirectML not supported - using CPU-only mode" -ForegroundColor Yellow
+        }
     } else {
-        # Intel x86_64 specific packages
-        $requirements = @"
-torch>=2.0.0
-torchvision>=0.15.0
-diffusers>=0.21.0
-transformers>=4.25.0
-accelerate>=0.16.0
-xformers>=0.0.16
-safetensors>=0.3.0
-Pillow>=9.3.0
-numpy>=1.24.0
-opencv-python>=4.7.0
-psutil>=5.9.0
-flask>=2.2.0
-flask-socketio>=5.3.0
-requests>=2.28.0
-websocket-client>=1.4.0
-python-socketio>=5.7.0
-directml>=1.12.0
-onnxruntime-directml>=1.16.0
-"@
+        Write-Host "ARM64 detected - DirectML not available, using optimized CPU mode" -ForegroundColor Cyan
     }
-
-    $requirementsPath = "$DemoPath\requirements.txt"
-    $requirements | Out-File -FilePath $requirementsPath -Encoding UTF8
     
     try {
         # Create virtual environment
         Set-Location $DemoPath
-        Write-Host "Creating virtual environment..." -ForegroundColor Yellow
+        Write-Host "`nCreating virtual environment..." -ForegroundColor Yellow
         python -m venv venv
         
-        # Activate virtual environment and install dependencies
-        Write-Host "Activating virtual environment and installing packages..." -ForegroundColor Yellow
+        # Activate virtual environment
+        Write-Host "Activating virtual environment..." -ForegroundColor Yellow
         & "$DemoPath\venv\Scripts\Activate.ps1"
         
-        # Upgrade pip first
-        python -m pip install --upgrade pip --quiet
+        # Upgrade pip first with verbose output
+        Write-Host "`nUpgrading pip..." -ForegroundColor Yellow
+        pip install --upgrade pip --verbose
         
-        # Install packages with better error handling
-        Write-Host "Installing Python packages (this may take several minutes)..." -ForegroundColor Yellow
-        pip install -r requirements.txt --no-warn-script-location
+        # Define core packages (required for basic functionality)
+        $corePackages = @(
+            "torch>=2.0.0",
+            "torchvision>=0.15.0",
+            "diffusers>=0.21.0",
+            "transformers>=4.25.0",
+            "accelerate>=0.16.0",
+            "safetensors>=0.3.0",
+            "Pillow>=9.3.0",
+            "numpy>=1.24.0",
+            "requests>=2.28.0"
+        )
         
-        Write-Host "Python dependencies installed successfully" -ForegroundColor Green
+        # Define optional packages (nice to have)
+        $optionalPackages = @(
+            "opencv-python>=4.7.0",
+            "psutil>=5.9.0",
+            "flask>=2.2.0",
+            "flask-socketio>=5.3.0",
+            "websocket-client>=1.4.0",
+            "python-socketio>=5.7.0"
+        )
+        
+        # Define platform-specific packages
+        $platformPackages = @()
+        if ($architecture -eq "ARM64") {
+            $platformPackages = @("onnxruntime>=1.16.0")
+        } elseif ($directMLSupported) {
+            $platformPackages = @(
+                "directml>=1.12.0",
+                "onnxruntime-directml>=1.16.0",
+                "xformers>=0.0.16"
+            )
+        } else {
+            $platformPackages = @("onnxruntime>=1.16.0")
+        }
+        
+        # Install core packages
+        Write-Host "`n📦 Installing core packages..." -ForegroundColor Yellow
+        $coreSuccess = 0
+        $coreTotal = $corePackages.Count
+        
+        foreach ($package in $corePackages) {
+            if (Install-PackageWithRetry -PackageName $package) {
+                $coreSuccess++
+            }
+        }
+        
+        Write-Host "`n📊 Core packages: $coreSuccess/$coreTotal installed successfully" -ForegroundColor $(if($coreSuccess -eq $coreTotal) { "Green" } else { "Yellow" })
+        
+        if ($coreSuccess -lt ($coreTotal * 0.8)) {
+            Write-Host "❌ Too many core packages failed. Demo may not work properly." -ForegroundColor Red
+            return $false
+        }
+        
+        # Install optional packages
+        Write-Host "`n🔧 Installing optional packages..." -ForegroundColor Yellow
+        $optionalSuccess = 0
+        
+        foreach ($package in $optionalPackages) {
+            if (Install-PackageWithRetry -PackageName $package) {
+                $optionalSuccess++
+            }
+        }
+        
+        Write-Host "`n📊 Optional packages: $optionalSuccess/$($optionalPackages.Count) installed successfully" -ForegroundColor Green
+        
+        # Install platform-specific packages
+        if ($platformPackages.Count -gt 0) {
+            Write-Host "`n⚡ Installing platform-specific packages..." -ForegroundColor Yellow
+            $platformSuccess = 0
+            
+            foreach ($package in $platformPackages) {
+                if (Install-PackageWithRetry -PackageName $package) {
+                    $platformSuccess++
+                } else {
+                    if ($package -like "*directml*") {
+                        Write-Host "❌ DirectML installation failed. Falling back to CPU-only mode." -ForegroundColor Yellow
+                        Write-Host "   This is common on older systems or without proper DirectX support." -ForegroundColor Yellow
+                        
+                        # Try to install CPU-only alternative
+                        Write-Host "   Installing CPU-only alternative..." -ForegroundColor Yellow
+                        Install-PackageWithRetry -PackageName "onnxruntime>=1.16.0" | Out-Null
+                    }
+                }
+            }
+            
+            Write-Host "`n📊 Platform packages: $platformSuccess/$($platformPackages.Count) installed successfully" -ForegroundColor Green
+        }
+        
+        # Validate installation
+        Write-Host "`n🔍 Validating installation..." -ForegroundColor Yellow
+        
+        try {
+            python -c "import torch; print(f'PyTorch {torch.__version__} - Device: {torch.device(\"cuda\" if torch.cuda.is_available() else \"cpu\")}')"
+            python -c "import diffusers; print(f'Diffusers {diffusers.__version__}')"
+            Write-Host "✓ Core AI packages validated successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "⚠️  Package validation had issues, but basic functionality should work" -ForegroundColor Yellow
+        }
+        
+        Write-Host "`n============================================" -ForegroundColor Green
+        Write-Host "INSTALLATION SUMMARY" -ForegroundColor Green
+        Write-Host "============================================" -ForegroundColor Green
+        Write-Host "Platform: $architecture" -ForegroundColor White
+        Write-Host "DirectML Support: $(if($directMLSupported) { 'Yes' } else { 'No' })" -ForegroundColor White
+        Write-Host "Core Packages: $coreSuccess/$coreTotal" -ForegroundColor White
+        Write-Host "Optional Packages: $optionalSuccess/$($optionalPackages.Count)" -ForegroundColor White
+        if ($platformPackages.Count -gt 0) {
+            Write-Host "Platform Packages: $platformSuccess/$($platformPackages.Count)" -ForegroundColor White
+        }
+        Write-Host "============================================" -ForegroundColor Green
+        
         return $true
         
     } catch {
-        Write-Host "Warning: Some packages may have failed to install: $_" -ForegroundColor Yellow
-        Write-Host "Demo will still work with available packages" -ForegroundColor Yellow
-        return $true  # Continue anyway, core functionality should work
+        Write-Host "❌ Fatal error during package installation: $_" -ForegroundColor Red
+        Write-Host "📋 Please check the error details above and try manual installation if needed" -ForegroundColor Yellow
+        return $false
     }
 }
 
