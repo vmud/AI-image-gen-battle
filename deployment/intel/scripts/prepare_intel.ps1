@@ -536,7 +536,7 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
             $details = $script:deploymentState.StepDetails[$step]
             $report += "  ✓ $step"
             if ($details) {
-                $report += " ($(($details.CompletedAt)))"
+                $report += " ($($details.CompletedAt))"
             }
             $report += "`n"
         }
