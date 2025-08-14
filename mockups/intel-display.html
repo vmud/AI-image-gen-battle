@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intel Core Ultra 7 - AI Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(90deg, #0071c5 0%, #00a8ff 100%);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0, 113, 197, 0.3);
+        }
+        
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo::before {
+            content: "⚡";
+            margin-right: 10px;
+            font-size: 32px;
+        }
+        
+        .status {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffa500;
+            text-shadow: 0 0 10px rgba(255, 165, 0, 0.5);
+            animation: blink 1.5s infinite;
+        }
+        
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.6; }
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            padding: 30px;
+            gap: 30px;
+        }
+        
+        .image-section {
+            flex: 2;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid rgba(0, 113, 197, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .image-container {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #2a2a3e 25%, transparent 25%), 
+                        linear-gradient(-45deg, #2a2a3e 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #2a2a3e 75%), 
+                        linear-gradient(-45deg, transparent 75%, #2a2a3e 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .generating-image {
+            width: 90%;
+            height: 90%;
+            background: linear-gradient(135deg, #3a3a5c 0%, #2a2a4e 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .partial-image {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 60%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #3a3a5c 50%);
+            border-radius: 10px 10px 0 0;
+            opacity: 0.7;
+        }
+        
+        .generating-text {
+            position: relative;
+            z-index: 2;
+            background: rgba(42, 42, 78, 0.9);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        
+        .processing-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #ffa500;
+            color: #1a1a2e;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 4px 15px rgba(255, 165, 0, 0.4);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .metrics-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .metric-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #0071c5;
+        }
+        
+        .metric-title {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffa500;
+        }
+        
+        .metric-unit {
+            font-size: 16px;
+            color: #ccc;
+            margin-left: 5px;
+        }
+        
+        .progress-section {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #ffa500;
+        }
+        
+        .progress-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            color: #ffa500;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            position: relative;
+        }
+        
+        .progress-fill {
+            width: 75%;
+            height: 100%;
+            background: linear-gradient(90deg, #ffa500, #ff8c00);
+            border-radius: 10px;
+            position: relative;
+            animation: loading 3s infinite;
+        }
+        
+        @keyframes loading {
+            0% { width: 70%; }
+            50% { width: 78%; }
+            100% { width: 75%; }
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: -20px;
+            width: 20px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        
+        .step-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 16px;
+        }
+        
+        .prompt-display {
+            background: rgba(0, 113, 197, 0.1);
+            border: 1px solid rgba(0, 113, 197, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-style: italic;
+            color: #00a8ff;
+        }
+        
+        .processing-indicator {
+            display: inline-block;
+            animation: dots 1.5s infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">Intel Core Ultra 7</div>
+        <div class="status">⏳ PROCESSING<span class="processing-indicator">...</span></div>
+    </div>
+    
+    <div class="main-content">
+        <div class="image-section">
+            <div class="processing-badge">WORKING</div>
+            <div class="image-container">
+                <div class="generating-image">
+                    <div class="partial-image"></div>
+                    <div class="generating-text">
+                        🏙️ Generating Image:<br>
+                        "A futuristic cityscape"<br>
+                        <small style="opacity: 0.8; margin-top: 10px;">
+                            Processing with CPU + iGPU<br>
+                            Please wait<span class="processing-indicator">...</span>
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="metrics-section">
+            <div class="metric-card">
+                <div class="metric-title">Generation Time</div>
+                <div class="metric-value">12.1<span class="metric-unit">seconds</span></div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">CPU Utilization</div>
+                <div class="metric-value">89<span class="metric-unit">%</span></div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">Memory Usage</div>
+                <div class="metric-value">6.8<span class="metric-unit">GB</span></div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">Power Consumption</div>
+                <div class="metric-value">28<span class="metric-unit">W</span></div>
+            </div>
+            
+            <div class="progress-section">
+                <div class="progress-title">⚙️ Generation Progress</div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="step-info">
+                    <span>Steps: 15/20</span>
+                    <span>75% Complete</span>
+                </div>
+            </div>
+            
+            <div class="prompt-display">
+                💭 Prompt: "A futuristic cityscape with flying cars and neon lights"
+            </div>
+        </div>
+    </div>
+</body>
+</html>
