@@ -534,7 +534,7 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
         $report += "`n`nCOMPLETED STEPS:`n"
         foreach ($step in $script:deploymentState.CompletedSteps) {
             $details = $script:deploymentState.StepDetails[$step]
-            $report += "  ✓ $step"
+            $report += "  [OK] $step"
             if ($details) {
                 $report += " ($($details.CompletedAt))"
             }
@@ -546,7 +546,7 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
         $report += "`nPACKAGE VERSIONS:`n"
         foreach ($package in $script:deploymentState.PackageVersions.GetEnumerator()) {
             $info = $package.Value
-            $status = if ($info.Compatible) { "✓" } else { "✗" }
+            $status = if ($info.Compatible) { "[OK]" } else { "[X]" }
             $report += "  $status $($package.Key): $($info.InstalledVersion)`n"
         }
     }
@@ -555,7 +555,7 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
         $report += "`nVALIDATION RESULTS:`n"
         foreach ($validation in $script:deploymentState.ValidationResults.GetEnumerator()) {
             $result = $validation.Value
-            $status = if ($result.Success) { "✓" } else { "✗" }
+            $status = if ($result.Success) { "[OK]" } else { "[X]" }
             $report += "  $status $($validation.Key)"
             if ($result.Duration) {
                 $report += " ($($result.Duration.ToString('F2'))s)"
@@ -568,14 +568,14 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
         $report += "`nCHECKPOINTS:`n"
         foreach ($checkpoint in $script:deploymentState.Checkpoints.GetEnumerator()) {
             $cp = $checkpoint.Value
-            $report += "  📍 $($checkpoint.Key) ($($cp.CreatedAt))`n"
+            $report += "  [CHECKPOINT] $($checkpoint.Key) ($($cp.CreatedAt))`n"
         }
     }
     
     if ($script:deploymentState.ErrorHistory.Count -gt 0) {
         $report += "`nERROR HISTORY:`n"
         foreach ($errorItem in $script:deploymentState.ErrorHistory) {
-            $report += "  ✗ $($errorItem.Name): $($errorItem.Error)`n"
+            $report += "  [X] $($errorItem.Name): $($errorItem.Error)`n"
         }
     }
     
