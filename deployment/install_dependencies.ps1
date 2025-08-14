@@ -15,9 +15,9 @@ Write-Host "============================================" -ForegroundColor Cyan
 
 # Function to test if a Python package is available
 function Test-PythonPackage {
-    param($PackageName)
+    param([string]$PackageName)
     try {
-        python -c "import $PackageName; print(f'✓ {$PackageName} available')" 2>$null
+        python -c "import $PackageName; print('✓ ' + '$PackageName' + ' available')" 2>$null
         return $LASTEXITCODE -eq 0
     } catch {
         return $false
@@ -26,9 +26,9 @@ function Test-PythonPackage {
 
 # Function to get package version
 function Get-PythonPackageVersion {
-    param($PackageName)
+    param([string]$PackageName)
     try {
-        $version = python -c "import $PackageName; print($PackageName.__version__)" 2>$null
+        $version = python -c "import $PackageName; print(${PackageName}.__version__)" 2>$null
         if ($LASTEXITCODE -eq 0) {
             return $version.Trim()
         }
@@ -93,7 +93,8 @@ if ($missingPackages.Count -eq 0 -and -not $Force) {
     exit 0
 }
 
-Write-Host "`n[INFO] Missing packages: $($missingPackages -join ', ')" -ForegroundColor Yellow
+$missingList = $missingPackages -join ', '
+Write-Host "`n[INFO] Missing packages: $missingList" -ForegroundColor Yellow
 
 # Determine installation method
 if ($Method -eq "auto") {
