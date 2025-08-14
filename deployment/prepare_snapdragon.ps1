@@ -24,13 +24,13 @@ $script:issues = @()
 $script:warnings = @()
 
 # Color output functions
-function Write-Success { Write-Host "✓ $args" -ForegroundColor Green }
-function Write-Error { Write-Host "✗ $args" -ForegroundColor Red }
-function Write-Warning { Write-Host "⚠ $args" -ForegroundColor Yellow }
-function Write-Info { Write-Host "ℹ $args" -ForegroundColor Cyan }
-function Write-VerboseInfo { 
-    if ($script:Verbose) { 
-        Write-Host "  → $args" -ForegroundColor DarkGray 
+function Write-Success { Write-Host "[OK] $args" -ForegroundColor Green }
+function Write-Error { Write-Host "[X] $args" -ForegroundColor Red }
+function Write-Warning { Write-Host "[!] $args" -ForegroundColor Yellow }
+function Write-Info { Write-Host "[i] $args" -ForegroundColor Cyan }
+function Write-VerboseInfo {
+    if ($script:Verbose) {
+        Write-Host "  -> $args" -ForegroundColor DarkGray
     }
 }
 function Write-Progress {
@@ -45,7 +45,7 @@ function Write-Progress {
 }
 
 # Progress spinner for long operations
-$script:spinnerChars = @('⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏')
+$script:spinnerChars = @('|','/','-','\')
 $script:spinnerIndex = 0
 function Show-Spinner {
     param($Message)
@@ -606,7 +606,7 @@ function Download-Models {
                         
                         # Update every 5% or on completion
                         if ($percent -ge ($lastPercent + 5) -or $percent -eq 100) {
-                            Write-Host "`r  ⬇ Downloading: $($received)MB / $($total)MB ($percent%)" -NoNewline -ForegroundColor Yellow
+                            Write-Host "`r  [v] Downloading: $($received)MB / $($total)MB ($percent%)" -NoNewline -ForegroundColor Yellow
                             $lastPercent = $percent
                         }
                     }
@@ -802,11 +802,11 @@ sys.path.insert(0, 'C:\\AIDemo\\client')
 
 try:
     if verbose:
-        print("→ Importing platform detection module...")
+        print("-> Importing platform detection module...")
     from platform_detection import detect_platform
     
     if verbose:
-        print("→ Importing AI pipeline module...")
+        print("-> Importing AI pipeline module...")
     from ai_pipeline import AIImagePipeline
     
     print("Detecting platform...")
@@ -815,18 +815,18 @@ try:
     print(f"Acceleration: {platform['acceleration']}")
     
     if verbose:
-        print(f"→ Platform details:")
+        print(f"-> Platform details:")
         for key, value in platform.items():
             print(f"  {key}: {value}")
     
     if platform['is_snapdragon']:
-        print("✓ Snapdragon platform confirmed")
+        print("[OK] Snapdragon platform confirmed")
     else:
-        print("⚠ Not detected as Snapdragon")
+        print("[!] Not detected as Snapdragon")
     
     print("\nInitializing AI pipeline...")
     if verbose:
-        print("→ Loading model weights and configuration...")
+        print("-> Loading model weights and configuration...")
     
     start = time.time()
     pipeline = AIImagePipeline(platform)
@@ -834,16 +834,16 @@ try:
     print(f"Initialization time: {init_time:.2f}s")
     
     if verbose:
-        print(f"→ Pipeline initialized with providers: {getattr(pipeline, 'providers', 'unknown')}")
+        print(f"-> Pipeline initialized with providers: {getattr(pipeline, 'providers', 'unknown')}")
     
     print("\nGenerating test image...")
     prompt = "A futuristic robot, digital art, highly detailed"
     
     if verbose:
-        print(f"→ Prompt: {prompt}")
-        print(f"→ Steps: 4")
-        print(f"→ Resolution: 768x768")
-        print("→ Starting generation...")
+        print(f"-> Prompt: {prompt}")
+        print(f"-> Steps: 4")
+        print(f"-> Resolution: 768x768")
+        print("-> Starting generation...")
     
     start = time.time()
     
@@ -856,21 +856,21 @@ try:
     result = pipeline.generate(prompt, steps=4, callback=progress_callback if verbose else None)
     gen_time = time.time() - start
     
-    print(f"\n✓ Generation completed in {gen_time:.2f}s")
+    print(f"\n[OK] Generation completed in {gen_time:.2f}s")
     
     if verbose:
-        print(f"→ Average time per step: {gen_time/4:.2f}s")
-        print(f"→ Estimated throughput: {60/gen_time:.1f} images/minute")
+        print(f"-> Average time per step: {gen_time/4:.2f}s")
+        print(f"-> Estimated throughput: {60/gen_time:.1f} images/minute")
     
     if gen_time < 10:
-        print("✓ NPU acceleration appears to be working!")
+        print("[OK] NPU acceleration appears to be working!")
     elif gen_time < 30:
-        print("⚠ Performance is moderate - NPU may not be fully utilized")
+        print("[!] Performance is moderate - NPU may not be fully utilized")
     else:
-        print("⚠ Performance is slow - likely using CPU fallback")
+        print("[!] Performance is slow - likely using CPU fallback")
         
 except Exception as e:
-    print(f"✗ Test failed: {e}")
+    print(f"[X] Test failed: {e}")
     if verbose:
         import traceback
         traceback.print_exc()
@@ -911,25 +911,25 @@ HARDWARE STATUS:
     
     if ($script:issues.Count -eq 0) {
         $report += @"
-OVERALL STATUS: ✓ DEMO READY
+OVERALL STATUS: [OK] DEMO READY
 
 All requirements met. The system is ready for demonstration.
 
 Key Features Enabled:
-  • Snapdragon X Elite NPU acceleration
-  • Optimized INT8 models loaded
-  • Network communication configured
-  • Expected performance: 3-5 seconds per image
+  * Snapdragon X Elite NPU acceleration
+  * Optimized INT8 models loaded
+  * Network communication configured
+  * Expected performance: 3-5 seconds per image
 
 "@
     } else {
         $report += @"
-OVERALL STATUS: ✗ NOT READY
+OVERALL STATUS: [X] NOT READY
 
 Critical Issues Found:
 "@
         foreach ($issue in $script:issues) {
-            $report += "  • $issue`n"
+            $report += "  * $issue`n"
         }
     }
     
@@ -939,7 +939,7 @@ Critical Issues Found:
 Warnings:
 "@
         foreach ($warning in $script:warnings) {
-            $report += "  • $warning`n"
+            $report += "  * $warning`n"
         }
     }
     
@@ -969,10 +969,10 @@ function Main {
     $script:Verbose = $Verbose
     
     Write-Host @"
-╔══════════════════════════════════════════════════════════╗
-║     SNAPDRAGON X ELITE DEMO PREPARATION SCRIPT          ║
-║     Optimized for NPU-Accelerated AI Generation         ║
-╚══════════════════════════════════════════════════════════╝
++============================================================+
+|     SNAPDRAGON X ELITE DEMO PREPARATION SCRIPT            |
+|     Optimized for NPU-Accelerated AI Generation           |
++============================================================+
 "@ -ForegroundColor Cyan
     
     if ($CheckOnly) {
@@ -1049,13 +1049,13 @@ function Main {
     
     # Exit code based on readiness
     if ($script:issues.Count -eq 0) {
-        Write-Host "`n✓ SYSTEM IS DEMO READY!" -ForegroundColor Green
+        Write-Host "`n[OK] SYSTEM IS DEMO READY!" -ForegroundColor Green
         if ($script:Verbose) {
             Write-VerboseInfo "All requirements satisfied - system ready for Snapdragon NPU demo"
         }
         exit 0
     } else {
-        Write-Host "`n✗ System requires attention before demo" -ForegroundColor Red
+        Write-Host "`n[X] System requires attention before demo" -ForegroundColor Red
         if ($script:Verbose) {
             Write-VerboseInfo "Critical issues must be resolved:"
             $script:issues | ForEach-Object { Write-VerboseInfo "  - $_" }
