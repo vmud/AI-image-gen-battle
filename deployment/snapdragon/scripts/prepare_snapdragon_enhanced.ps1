@@ -80,7 +80,7 @@ function Write-StepProgress {
 
 function Write-Success {
     param([string]$Message)
-    Write-Host "[✓] $Message" -ForegroundColor Green
+    Write-Host "[OK] $Message" -ForegroundColor Green
     Write-Log -Message $Message -Level "Success"
 }
 
@@ -391,13 +391,13 @@ class DemoClient:
                 result = self.pipeline.generate(prompt, steps=1)
                 
                 if result['success']:
-                    print("  ✓ Generated in {:.2f}s ({})".format(result['generation_time'], result['performance']))
+                    print("  [OK] Generated in {:.2f}s ({})".format(result['generation_time'], result['performance']))
                     passed_tests += 1
                 else:
-                    print("  ✗ Failed: " + str(result.get('error', 'Unknown error')))
+                    print("  [X] Failed: " + str(result.get('error', 'Unknown error')))
 
             except Exception as e:
-                print("  ✗ Exception: " + str(e))
+                print("  [X] Exception: " + str(e))
         
         # Summary
         success_rate = (passed_tests / total_tests) * 100
@@ -405,10 +405,10 @@ class DemoClient:
         print("DEMO RESULTS: {}/{} tests passed ({:.0f}%)".format(passed_tests, total_tests, success_rate))
         
         if success_rate >= 67:
-            print("✓ DEMO READY - System functioning correctly!")
+            print("[OK] DEMO READY - System functioning correctly!")
             status = "READY"
         else:
-            print("⚠ DEMO PARTIALLY READY - Some functionality limited")
+            print("[!] DEMO PARTIALLY READY - Some functionality limited")
             status = "PARTIAL"
         
         # Save results
