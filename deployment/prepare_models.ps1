@@ -51,21 +51,24 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
 
 "@ -ForegroundColor Cyan
 
-    # First ensure all required packages are installed
-    Write-Host "Checking and installing required packages for ARM64..." -ForegroundColor Yellow
+    # FORCE COMPLETE ENVIRONMENT REBUILD FOR COMPATIBILITY
+    Write-Host "🔄 REBUILDING ENVIRONMENT FOR NPU COMPATIBILITY..." -ForegroundColor Yellow
     
-    # Install core AI libraries with compatible versions
-    Write-Host "Installing diffusers and dependencies..." -ForegroundColor Yellow
+    Write-Host "   Uninstalling conflicting packages..." -ForegroundColor Gray
+    pip uninstall -y torch torchvision diffusers transformers optimum huggingface_hub accelerate 2>$null
     
-    # Upgrade huggingface_hub first to fix cached_download issue
-    pip install --upgrade huggingface_hub --quiet
+    Write-Host "   Installing PyTorch 2.1+ (REQUIRED for NPU)..." -ForegroundColor Yellow
+    pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu --quiet --force-reinstall
     
-    # Install compatible versions for ARM64
-    pip install diffusers>=0.24.0 transformers>=4.35.0 accelerate>=0.20.3 safetensors>=0.3.1 --quiet
+    Write-Host "   Installing compatible HuggingFace ecosystem..." -ForegroundColor Yellow
+    pip install huggingface_hub==0.20.3 --quiet --force-reinstall
+    pip install transformers==4.36.2 --quiet --force-reinstall  
+    pip install diffusers==0.25.1 --quiet --force-reinstall
+    pip install accelerate==0.25.0 --quiet --force-reinstall
+    pip install safetensors==0.4.1 --quiet --force-reinstall
     
-    # Install torch for ARM64 (ensure 2.1+ for optimum compatibility)
-    Write-Host "Installing PyTorch 2.1+ for ARM64..." -ForegroundColor Yellow  
-    pip install torch>=2.1.0 torchvision>=0.16.0 --index-url https://download.pytorch.org/whl/cpu --quiet
+    Write-Host "   Installing optimum with ONNX support..." -ForegroundColor Yellow
+    pip install optimum[onnxruntime]==1.16.2 --quiet --force-reinstall
     
     # Install ONNX runtime with ARM64 optimization
     Write-Host "Installing ONNX runtime with ARM64 optimization..." -ForegroundColor Yellow
@@ -91,12 +94,54 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
         pip install optimum[onnxruntime] --quiet
     }
     
-    # Install huggingface hub for model downloads
-    pip install huggingface-hub --quiet
     
     # Download Qualcomm AI Hub CLI if not present (optional)
     Write-Host "Installing Qualcomm AI Hub tools (optional)..." -ForegroundColor Yellow
     pip install qai-hub --quiet 2>$null
+    
+    # VERIFY CRITICAL PACKAGES ARE CORRECTLY INSTALLED
+    Write-Host "🔍 VERIFYING PACKAGE INSTALLATION..." -ForegroundColor Cyan
+    python -c "
+import sys
+try:
+    import torch
+    print(f'✅ PyTorch: {torch.__version__}')
+    if torch.__version__.startswith('2.0'):
+        print('❌ ERROR: PyTorch 2.0 detected - NPU requires 2.1+')
+        sys.exit(1)
+        
+    import transformers
+    print(f'✅ Transformers: {transformers.__version__}')
+    
+    import diffusers  
+    print(f'✅ Diffusers: {diffusers.__version__}')
+    
+    import optimum
+    print(f'✅ Optimum: {optimum.__version__}')
+    
+    import onnxruntime
+    print(f'✅ ONNX Runtime: {onnxruntime.__version__}')
+    
+    providers = onnxruntime.get_available_providers()
+    qnn_available = 'QNNExecutionProvider' in providers
+    print(f'🎯 QNN Provider: {qnn_available}')
+    
+    print('🚀 ALL PACKAGES VERIFIED FOR NPU OPTIMIZATION')
+    
+except ImportError as e:
+    print(f'❌ IMPORT ERROR: {e}')
+    sys.exit(1)
+except Exception as e:
+    print(f'❌ VERIFICATION ERROR: {e}')
+    sys.exit(1)
+"
+    
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ CRITICAL: Package verification failed" -ForegroundColor Red
+        Write-Host "NPU optimization cannot proceed with current environment" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "✅ Package verification successful - NPU optimization ready" -ForegroundColor Green
 
     Write-Host "`nAvailable ARM64-optimized models:" -ForegroundColor Yellow
     Write-Host "1. SDXL-Turbo (1-4 steps, fast, ARM64-compatible)" -ForegroundColor White
@@ -216,71 +261,104 @@ except Exception as e:
             $modelSteps = 30
             Write-Host "`nDownloading SDXL-Base for ARM64..." -ForegroundColor Yellow
             
+            # Use the same robust NPU optimization for SDXL-Base
             $downloadScript = @"
 import os
 import sys
 from pathlib import Path
 
-try:
-    from optimum.onnxruntime import ORTStableDiffusionXLPipeline
-    import torch
-    
-    print("Downloading and optimizing SDXL-Base 1.0 for Snapdragon NPU...")
-    
+def check_qnn_availability():
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        qnn_available = 'QNNExecutionProvider' in providers
+        print(f"Available ONNX providers: {providers}")
+        print(f"QNN Provider available: {qnn_available}")
+        return qnn_available
+    except Exception as e:
+        print(f"Error checking QNN availability: {e}")
+        return False
+
+def force_qnn_optimization():
+    '''Force NPU optimization for SDXL-Base - this is required for Snapdragon demo'''
     models_dir = Path("C:/AIDemo/models")
     models_dir.mkdir(exist_ok=True, parents=True)
     
-    # Download and convert to ONNX with NPU optimization
-    output_path = models_dir / "sdxl_base_npu_optimized"
-    
-    print("Converting SDXL-Base to NPU-optimized ONNX format (this may take 15-20 minutes)...")
-    pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
-        "stabilityai/stable-diffusion-xl-base-1.0",
-        export=True,
-        provider="QNNExecutionProvider",
-        export_dir=str(output_path),
-        torch_dtype=torch.float16,
-        use_safetensors=True,
-        # NPU-specific optimizations for high quality
-        provider_options={
-            "backend_path": "QnnHtp.dll",
-            "device_id": 0,
-            "enable_htp_fp16_precision": True,
-            "enable_htp_weight_sharing": True
-        }
-    )
-    
-    # Save the NPU-optimized model
-    pipeline.save_pretrained(str(output_path))
-    
-    print(f"SDXL-Base NPU-optimized model ready at: {output_path}")
-    print("Model is configured for Snapdragon NPU acceleration with high quality settings")
-    
-except ImportError as e:
-    print(f"Import error: {e}")
-    print("Installing missing dependencies...")
-    import subprocess
-    subprocess.run([sys.executable, "-m", "pip", "install", "optimum[onnxruntime]", "onnxruntime-qnn"])
-    # Retry with basic download if ONNX conversion fails
     try:
+        # Import and verify all required packages
+        print("Importing required packages for NPU optimization...")
         from optimum.onnxruntime import ORTStableDiffusionXLPipeline
-        pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
-            "stabilityai/stable-diffusion-xl-base-1.0",
-            export=True,
-            provider="QNNExecutionProvider",
-            export_dir=str(output_path)
-        )
-        pipeline.save_pretrained(str(output_path))
-        print("NPU-optimized model created successfully")
-    except Exception as retry_e:
-        print(f"NPU optimization failed, using fallback: {retry_e}")
-        from huggingface_hub import snapshot_download
-        output_path = models_dir / "sdxl-base-1.0"
-        snapshot_download("stabilityai/stable-diffusion-xl-base-1.0", local_dir=str(output_path))
-        print("Standard model downloaded - NPU optimization requires manual setup")
+        import torch
+        import onnxruntime as ort
+        
+        print(f"PyTorch version: {torch.__version__}")
+        print(f"ONNX Runtime version: {ort.__version__}")
+        
+        # Check QNN availability 
+        qnn_available = check_qnn_availability()
+        
+        if not qnn_available:
+            print("ERROR: QNN Provider not detected!")
+            print("Installing QNN runtime...")
+            import subprocess
+            result = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--force-reinstall", "onnxruntime-qnn"], 
+                                  capture_output=True, text=True)
+            print(f"QNN install result: {result.returncode}")
+            if result.stdout: print(f"stdout: {result.stdout}")
+            if result.stderr: print(f"stderr: {result.stderr}")
+            
+            # Re-check after installation
+            qnn_available = check_qnn_availability()
+            
+        if qnn_available:
+            print("✅ QNN Provider detected - proceeding with NPU optimization")
+            
+            # Convert with full NPU optimization for SDXL-Base (higher quality)
+            print("Converting SDXL-Base with Snapdragon NPU optimization (15-20 minutes)...")
+            output_path = models_dir / "sdxl_base_npu_optimized"
+            
+            # Use provider options optimized for Snapdragon X Elite with quality focus
+            provider_options = {
+                "backend_path": "QnnHtp.dll",
+                "device_id": 0,
+                "enable_htp_fp16_precision": True,
+                "enable_htp_weight_sharing": True,
+                "qnn_context_priority": "high",
+                "qnn_saver_path": str(output_path / "qnn_cache")
+            }
+            
+            pipeline = ORTStableDiffusionXLPipeline.from_pretrained(
+                "stabilityai/stable-diffusion-xl-base-1.0",
+                export=True,
+                provider="QNNExecutionProvider",
+                export_dir=str(output_path),
+                torch_dtype=torch.float16,
+                use_safetensors=True,
+                provider_options=provider_options
+            )
+            
+            pipeline.save_pretrained(str(output_path))
+            print(f"🚀 SNAPDRAGON NPU-OPTIMIZED SDXL-BASE READY: {output_path}")
+            print("This model will use Hexagon DSP for maximum quality and performance!")
+            return str(output_path)
+            
+        else:
+            raise Exception("QNN Provider installation failed - NPU optimization not possible")
+            
+    except Exception as e:
+        print(f"❌ NPU optimization failed: {e}")
+        print("This is a critical error for Snapdragon demo - NPU optimization is required")
+        raise e
+
+# Execute NPU optimization for SDXL-Base
+try:
+    print("🎯 FORCING SNAPDRAGON NPU OPTIMIZATION FOR SDXL-BASE...")
+    result_path = force_qnn_optimization()
+    print(f"✅ SUCCESS: NPU-optimized SDXL-Base ready at: {result_path}")
     
 except Exception as e:
-    print(f"Error: {e}")
+    print(f"💥 CRITICAL ERROR: {e}")
+    print("Snapdragon NPU optimization failed - demo requirements not met")
     sys.exit(1)
 "@
         }
