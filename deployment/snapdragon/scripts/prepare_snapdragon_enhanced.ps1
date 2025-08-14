@@ -161,7 +161,7 @@ import sys
 import os
 
 def detect_platform():
-    system_info = {
+    system_info = {{
         'name': platform.system(),
         'release': platform.release(),
         'version': platform.version(),
@@ -169,7 +169,7 @@ def detect_platform():
         'processor': platform.processor(),
         'architecture': platform.architecture()[0],
         'platform': platform.platform()
-    }
+    }}
     
     # Enhanced Snapdragon X Elite detection
     is_snapdragon = False
@@ -210,20 +210,20 @@ def detect_platform():
             pass
             
     except Exception as e:
-        print(f"Warning: Platform detection partial failure: {e}")
+        print("Warning: Platform detection partial failure: " + str(e))
     
-    return {
+    return {{
         **system_info,
         'is_snapdragon': is_snapdragon,
         'npu_available': npu_available,
         'acceleration': acceleration,
         'recommended_providers': ['QNNExecutionProvider', 'DmlExecutionProvider', 'CPUExecutionProvider']
-    }
+    }}
 
 if __name__ == "__main__":
     info = detect_platform()
     for key, value in info.items():
-        print(f"{key}: {value}")
+        print(str(key) + ": " + str(value))
 "@
             "ai_pipeline.py" = @"
 import os
@@ -241,7 +241,7 @@ class AIImagePipeline:
         self.platform_info = platform_info or {}
         self.models_path = Path("C:/AIDemo/models")
         self.providers = self._setup_providers()
-        logger.info(f"Initialized pipeline with providers: {self.providers}")
+        logger.info("Initialized pipeline with providers: " + str(self.providers))
     
     def _setup_providers(self):
         providers = ['CPUExecutionProvider']  # Always available fallback
@@ -259,10 +259,10 @@ class AIImagePipeline:
             ]
             
             providers = [p for p in preferred if p in available]
-            logger.info(f"Available ONNX providers: {available}")
-            
+            logger.info("Available ONNX providers: " + str(available))
+
         except ImportError as e:
-            logger.warning(f"ONNX Runtime not available: {e}")
+            logger.warning("ONNX Runtime not available: " + str(e))
         
         return providers
     
@@ -275,7 +275,7 @@ class AIImagePipeline:
             logger.info("Loading models...")
             time.sleep(0.5)  # Simulate model loading
             
-            logger.info(f"Running inference with {self.providers[0]}")
+            logger.info("Running inference with " + str(self.providers[0]))
             
             # Simulate generation based on acceleration
             if 'QNNExecutionProvider' in self.providers:
@@ -294,7 +294,7 @@ class AIImagePipeline:
             time.sleep(generation_time)
             
             total_time = time.time() - start_time
-            logger.info(f"Generation completed in {total_time:.2f}s - {performance}")
+            logger.info("Generation completed in {:.2f}s - {}".format(total_time, performance))
             
             # Return result metadata
             return {
@@ -309,7 +309,7 @@ class AIImagePipeline:
             }
             
         except Exception as e:
-            logger.error(f"Generation failed: {e}")
+            logger.error("Generation failed: " + str(e))
             return {
                 'success': False,
                 'error': str(e),
@@ -324,7 +324,7 @@ if __name__ == "__main__":
     pipeline = AIImagePipeline(platform)
     
     result = pipeline.generate("A beautiful landscape", steps=1)
-    print(f"Test result: {result}")
+    print("Test result: " + str(result))
 "@
             "demo_client.py" = @"
 import os
@@ -364,11 +364,11 @@ class DemoClient:
         print("="*60)
         
         # Display platform information
-        print(f"\nPlatform: {self.platform['platform']}")
-        print(f"Processor: {self.platform['processor']}")
-        print(f"Architecture: {self.platform['architecture']}")
-        print(f"Acceleration: {self.platform['acceleration']}")
-        print(f"NPU Available: {self.platform['npu_available']}")
+        print("\nPlatform: " + str(self.platform['platform']))
+        print("Processor: " + str(self.platform['processor']))
+        print("Architecture: " + str(self.platform['architecture']))
+        print("Acceleration: " + str(self.platform['acceleration']))
+        print("NPU Available: " + str(self.platform['npu_available']))
         
         # Test basic functionality
         print("\n" + "-"*40)
@@ -385,24 +385,24 @@ class DemoClient:
         passed_tests = 0
         
         for i, prompt in enumerate(test_prompts, 1):
-            print(f"\nTest {i}/{total_tests}: {prompt}")
+            print("\nTest {}/{}: {}".format(i, total_tests, prompt))
             
             try:
                 result = self.pipeline.generate(prompt, steps=1)
                 
                 if result['success']:
-                    print(f"  ✓ Generated in {result['generation_time']:.2f}s ({result['performance']})")
+                    print("  ✓ Generated in {:.2f}s ({})".format(result['generation_time'], result['performance']))
                     passed_tests += 1
                 else:
-                    print(f"  ✗ Failed: {result.get('error', 'Unknown error')}")
-                    
+                    print("  ✗ Failed: " + str(result.get('error', 'Unknown error')))
+
             except Exception as e:
-                print(f"  ✗ Exception: {e}")
+                print("  ✗ Exception: " + str(e))
         
         # Summary
         success_rate = (passed_tests / total_tests) * 100
-        print(f"\n" + "="*40)
-        print(f"DEMO RESULTS: {passed_tests}/{total_tests} tests passed ({success_rate:.0f}%)")
+        print("\n" + "="*40)
+        print("DEMO RESULTS: {}/{} tests passed ({:.0f}%)".format(passed_tests, total_tests, success_rate))
         
         if success_rate >= 67:
             print("✓ DEMO READY - System functioning correctly!")
@@ -426,7 +426,7 @@ class DemoClient:
         with open(results_file, 'w') as f:
             json.dump(results, f, indent=2)
         
-        print(f"\nResults saved to: {results_file}")
+        print("\nResults saved to: " + str(results_file))
         print("\nPress Enter to exit...")
         input()
         
@@ -437,8 +437,8 @@ if __name__ == "__main__":
         client = DemoClient()
         client.run_demo()
     except Exception as e:
-        logger.error(f"Demo client failed: {e}")
-        print(f"\nFATAL ERROR: {e}")
+        logger.error("Demo client failed: " + str(e))
+        print("\nFATAL ERROR: " + str(e))
         print("Check logs in C:/AIDemo/logs/ for details")
         input("Press Enter to exit...")
 "@
@@ -899,12 +899,12 @@ try:
     
     print("Detecting platform...")
     platform = detect_platform()
-    print(f"Platform: {platform['name']}")
-    print(f"Acceleration: {platform['acceleration']}")
-    
+    print("Platform: " + str(platform['name']))
+    print("Acceleration: " + str(platform['acceleration']))
+
     if verbose:
         for key, value in platform.items():
-            print(f"  {key}: {value}")
+            print("  " + str(key) + ": " + str(value))
     
     # Test NPU availability
     try:
@@ -912,17 +912,17 @@ try:
         providers = ort.get_available_providers()
         npu_providers = ['QNNExecutionProvider', 'DmlExecutionProvider']
         npu_available = any(p in providers for p in npu_providers)
-        print(f"NPU Acceleration: {'Available' if npu_available else 'Not Available'}")
-        print(f"Available providers: {providers}")
+        print("NPU Acceleration: " + ('Available' if npu_available else 'Not Available'))
+        print("Available providers: " + str(providers))
     except Exception as e:
-        print(f"Provider check failed: {e}")
+        print("Provider check failed: " + str(e))
     
     # Quick performance test
     print("\\nInitializing AI pipeline...")
     start = time.time()
     pipeline = AIImagePipeline(platform)
     init_time = time.time() - start
-    print(f"Initialization time: {init_time:.2f}s")
+    print("Initialization time: {:.2f}s".format(init_time))
     
     # Test generation (quick test)
     print("\\nRunning quick generation test...")
@@ -933,7 +933,7 @@ try:
     result = pipeline.generate(prompt, steps=1)
     gen_time = time.time() - start
     
-    print(f"Generation completed in {gen_time:.2f}s")
+    print("Generation completed in {:.2f}s".format(gen_time))
     
     # Performance assessment
     if gen_time < 5:
@@ -949,11 +949,11 @@ try:
         print("[!] Slow performance - CPU fallback mode")
         performance_level = "Slow"
     
-    print(f"\\nPerformance Level: {performance_level}")
-    print(f"Estimated full image time: {gen_time * 4:.1f}s")
-    
+    print("\\nPerformance Level: " + str(performance_level))
+    print("Estimated full image time: {:.1f}s".format(gen_time * 4))
+
 except Exception as e:
-    print(f"[X] Performance test failed: {e}")
+    print("[X] Performance test failed: " + str(e))
     if verbose:
         import traceback
         traceback.print_exc()
