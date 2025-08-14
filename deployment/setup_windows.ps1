@@ -452,18 +452,21 @@ function Create-StartupScript {
     
     Write-Host "Creating demo startup script..." -ForegroundColor Yellow
     
-    $startupScript = @"
+    # Get platform info at PowerShell level
+    $platformInfo = Get-PlatformArchitecture
+    
+    $startupScript = @'
 @echo off
 title AI Image Generation Demo Client
-cd /d $DemoPath
+cd /d {0}
 call venv\Scripts\activate.bat
 echo Starting AI Demo Client...
-echo Platform: $(Get-PlatformArchitecture)
+echo Platform: {1}
 echo Ready for demonstration!
 echo.
 python client\demo_client.py
 pause
-"@
+'@ -f $DemoPath, $platformInfo
 
     $startupPath = "$DemoPath\start_demo.bat"
     $startupScript | Out-File -FilePath $startupPath -Encoding ASCII
