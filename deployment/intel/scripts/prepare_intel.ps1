@@ -28,8 +28,6 @@
 param(
     [switch]$CheckOnly = $false,
     [switch]$Force = $false,
-    [switch]$WhatIf = $false,
-    [switch]$Verbose = $false,
     [switch]$SkipModelDownload = $false,
     [switch]$UseHttpRange = $true,
     [string]$LogPath = "C:\AIDemo\logs",
@@ -81,7 +79,7 @@ function Write-Info {
 
 function Write-VerboseInfo {
     param($Message)
-    if ($script:Verbose -or $VerbosePreference -eq 'Continue') {
+    if ($VerbosePreference -eq 'Continue') {
         Write-Host "  -> $Message" -ForegroundColor DarkGray
     }
 }
@@ -92,7 +90,7 @@ function Write-StepProgress {
     $percent = [math]::Round(($script:currentStep / $script:totalSteps) * 100)
     Write-Host "`n[$script:currentStep/$script:totalSteps] $Message" -ForegroundColor Magenta
     Write-Progress -Activity "Intel Demo Setup" -Status $Message -PercentComplete $percent
-    if ($script:Verbose) {
+    if ($VerbosePreference -eq 'Continue') {
         Write-Host ("-" * 60) -ForegroundColor DarkGray
     }
 }
@@ -1248,8 +1246,7 @@ Log file: $script:logFile
 
 # Main execution function
 function Main {
-    # Store parameters in script scope
-    $script:Verbose = $Verbose
+    # Parameters are handled by CmdletBinding
     
     Write-Host @"
 +============================================================+
@@ -1266,7 +1263,7 @@ function Main {
         Write-Info "Running in WHAT-IF mode - showing what would be done"
     }
     
-    if ($Verbose) {
+    if ($VerbosePreference -eq 'Continue') {
         Write-Info "VERBOSE mode enabled - detailed output will be shown"
     }
     
