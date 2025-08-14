@@ -28,7 +28,7 @@ function Test-PythonPackage {
 function Get-PythonPackageVersion {
     param([string]$PackageName)
     try {
-        $version = python -c "import $PackageName; print(${PackageName}.__version__)" 2>$null
+        $version = python -c "import $PackageName; print($PackageName.__version__)" 2>$null
         if ($LASTEXITCODE -eq 0) {
             return $version.Trim()
         }
@@ -93,7 +93,7 @@ if ($missingPackages.Count -eq 0 -and -not $Force) {
     exit 0
 }
 
-$missingList = $missingPackages -join ', '
+$missingList = $missingPackages -join ", "
 Write-Host "`n[INFO] Missing packages: $missingList" -ForegroundColor Yellow
 
 # Determine installation method
