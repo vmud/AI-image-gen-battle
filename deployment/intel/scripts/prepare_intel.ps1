@@ -584,13 +584,13 @@ function Install-IntelAcceleration {
     $accelerationStages = @(
         @{
             Name = "PyTorch CPU"
-            Packages = @("torch>=1.13.0,<2.1.0", "torchvision>=0.14.0,<0.16.0")
+            Packages = @("torch>=2.1.0,<2.2.0", "torchvision>=0.16.0,<0.17.0")
             IndexUrl = "https://download.pytorch.org/whl/cpu"
             Critical = $true
         },
         @{
             Name = "DirectML"
-            Packages = @("torch-directml>=1.12.0")
+            Packages = @("torch-directml>=1.13.0")
             IndexUrl = "https://download.pytorch.org/whl/directml"
             PreRelease = $true
             Critical = $true
@@ -1237,20 +1237,124 @@ except Exception as e:
 function Update-Repository {
     Write-StepProgress "Setting up repository files"
     
-    $sourceClient = if (Test-Path "$PSScriptRoot\..\src\windows-client") {
-        "$PSScriptRoot\..\src\windows-client"
-    } else {
-        ".\src\windows-client"
+    # Calculate correct path from script location to project root
+    # Script is at: deployment/intel/scripts/prepare_intel.ps1
+    # Need to go up 3 levels: scripts -> intel -> deployment -> project root
+    $primarySourcePath = "$PSScriptRoot\..\..\..\src\windows-client"
+    $fallbackSourcePath = ".\src\windows-client"
+    
+    Write-VerboseInfo "Script location: $PSScriptRoot"
+    Write-VerboseInfo "Primary source path: $primarySourcePath"
+    Write-VerboseInfo "Fallback source path: $fallbackSourcePath"
+    
+    # Resolve the absolute path for better validation
+    $resolvedPrimaryPath = $null
+    $resolvedFallbackPath = $null
+    
+    try {
+        $resolvedPrimaryPath = Resolve-Path $primarySourcePath -ErrorAction SilentlyContinue
+        Write-VerboseInfo "Resolved primary path: $resolvedPrimaryPath"
+    } catch {
+        Write-VerboseInfo "Could not resolve primary path: $primarySourcePath"
     }
     
-    if (Test-Path $sourceClient) {
-        if ($PSCmdlet.ShouldProcess("Client files", "Copy")) {
-            Write-Info "Copying client files..."
-            Copy-Item -Path "$sourceClient\*" -Destination $script:CLIENT_PATH -Recurse -Force
-            Write-Success "Client files deployed"
+    try {
+        $resolvedFallbackPath = Resolve-Path $fallbackSourcePath -ErrorAction SilentlyContinue
+        Write-VerboseInfo "Resolved fallback path: $resolvedFallbackPath"
+    } catch {
+        Write-VerboseInfo "Could not resolve fallback path: $fallbackSourcePath"
+    }
+    
+    # Determine which source path to use
+    $sourceClient = $null
+    if ($resolvedPrimaryPath -and (Test-Path $resolvedPrimaryPath)) {
+        $sourceClient = $resolvedPrimaryPath.Path
+        Write-VerboseInfo "Using primary source path: $sourceClient"
+    } elseif ($resolvedFallbackPath -and (Test-Path $resolvedFallbackPath)) {
+        $sourceClient = $resolvedFallbackPath.Path
+        Write-VerboseInfo "Using fallback source path: $sourceClient"
+    } elseif (Test-Path $primarySourcePath) {
+        $sourceClient = $primarySourcePath
+        Write-VerboseInfo "Using unresolved primary path: $sourceClient"
+    } elseif (Test-Path $fallbackSourcePath) {
+        $sourceClient = $fallbackSourcePath
+        Write-VerboseInfo "Using unresolved fallback path: $sourceClient"
+    }
+    
+    if ($sourceClient) {
+        # Validate that source contains expected client files
+        $expectedFiles = @("ai_pipeline.py", "demo_client.py", "platform_detection.py")
+        $missingFiles = @()
+        
+        foreach ($file in $expectedFiles) {
+            $filePath = Join-Path $sourceClient $file
+            if (!(Test-Path $filePath)) {
+                $missingFiles += $file
+                Write-VerboseInfo "Missing expected file: $filePath"
+            }
+        }
+        
+        if ($missingFiles.Count -gt 0) {
+            Write-WarningMsg "Source directory missing expected files: $($missingFiles -join ', ')"
+            Write-WarningMsg "Source path: $sourceClient"
+            Write-Info "Continuing anyway - some files may be optional"
+        } else {
+            Write-VerboseInfo "All expected client files found in source directory"
+        }
+        
+        if ($PSCmdlet.ShouldProcess("Client files from $sourceClient", "Copy")) {
+            try {
+                Write-Info "Copying client files from: $sourceClient"
+                Write-Info "Destination: $script:CLIENT_PATH"
+                
+                # Ensure destination directory exists
+                if (!(Test-Path $script:CLIENT_PATH)) {
+                    New-Item -ItemType Directory -Path $script:CLIENT_PATH -Force | Out-Null
+                    Write-VerboseInfo "Created client destination directory"
+                }
+                
+                # Copy all files and subdirectories
+                $copyParams = @{
+                    Path = "$sourceClient\*"
+                    Destination = $script:CLIENT_PATH
+                    Recurse = $true
+                    Force = $true
+                    ErrorAction = "Stop"
+                }
+                
+                Copy-Item @copyParams
+                
+                # Verify the copy operation
+                $copiedFiles = Get-ChildItem -Path $script:CLIENT_PATH -Recurse -File
+                Write-VerboseInfo "Copied $($copiedFiles.Count) files to client directory"
+                
+                # Log the copied files for debugging
+                if ($VerbosePreference -eq 'Continue') {
+                    $copiedFiles | ForEach-Object {
+                        Write-VerboseInfo "  Copied: $($_.Name)"
+                    }
+                }
+                
+                Write-Success "Client files deployed successfully"
+                Write-Info "Copied from: $sourceClient"
+                Write-Info "Files copied: $($copiedFiles.Count)"
+                
+            } catch {
+                Write-ErrorMsg "Failed to copy client files: $_"
+                Write-ErrorMsg "Source: $sourceClient"
+                Write-ErrorMsg "Destination: $script:CLIENT_PATH"
+                Write-Info "This may prevent the demo from running properly"
+                return $false
+            }
         }
     } else {
-        Write-WarningMsg "Client source files not found at $sourceClient"
+        Write-ErrorMsg "Client source files not found at any expected location:"
+        Write-ErrorMsg "  Primary: $primarySourcePath"
+        Write-ErrorMsg "  Fallback: $fallbackSourcePath"
+        Write-ErrorMsg "  Script location: $PSScriptRoot"
+        Write-Info "Please ensure the script is run from the correct location"
+        Write-Info "Expected project structure: deployment/intel/scripts/prepare_intel.ps1"
+        return $false
     }
     
     return $true
