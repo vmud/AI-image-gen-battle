@@ -27,19 +27,25 @@ python src/control-hub/demo_control.py --prompt "your prompt here"
 ### Windows Setup (PowerShell)
 ```powershell
 # Main setup with real-time logging (requires admin)
-.\deployment\setup.ps1
+.\deployment\common\scripts\setup.ps1
 
 # Monitor setup progress in another window
-.\deployment\monitor.ps1
+.\deployment\common\scripts\monitor.ps1
 
 # Troubleshoot DirectML issues
-.\deployment\diagnose.ps1
+.\deployment\common\scripts\diagnose.ps1
 
 # Download and prepare AI models
-.\deployment\prepare_models.ps1
+.\deployment\common\scripts\prepare_models.ps1
+
+# Intel-specific preparation
+.\deployment\intel\scripts\prepare_intel.ps1
+
+# Snapdragon-specific preparation
+.\deployment\snapdragon\scripts\prepare_snapdragon.ps1
 
 # Verify installation
-.\deployment\verify.ps1
+.\deployment\common\validation\verify.ps1
 ```
 
 ### Development Server
@@ -75,11 +81,24 @@ python -m http.server 8000
 - `ai_pipeline.py`: Stable Diffusion XL pipeline with platform-specific optimizations
 
 **Deployment (deployment/)**:
-- `setup.ps1`: Main setup with real-time logging, installs Python 3.9, Git, dependencies
-- `monitor.ps1`: Real-time progress monitoring for setup script
-- `diagnose.ps1`: Automated DirectML troubleshooting and fixes
-- `prepare_models.ps1`: Downloads platform-optimized AI models (Qualcomm AI Hub for Snapdragon)
-- `verify.ps1`: Validates complete installation and readiness
+- **Common Scripts** (`deployment/common/scripts/`):
+  - `setup.ps1`: Main setup with real-time logging, installs Python 3.9, Git, dependencies
+  - `monitor.ps1`: Real-time progress monitoring for setup script
+  - `diagnose.ps1`: Automated DirectML troubleshooting and fixes
+  - `prepare_models.ps1`: Downloads platform-optimized AI models
+  - `install_dependencies.ps1`: Installs Python dependencies via pip or poetry
+- **Intel-Specific** (`deployment/intel/`):
+  - `prepare_intel.ps1`: Intel Core Ultra specific optimizations and DirectML setup
+  - `test_intel_deployment.ps1`: Intel platform testing and validation
+- **Snapdragon-Specific** (`deployment/snapdragon/`):
+  - `prepare_snapdragon.ps1`: Snapdragon X Elite NPU optimizations and ONNX setup
+- **Validation** (`deployment/common/validation/`):
+  - `verify.ps1`: Validates complete installation and readiness
+  - `validate_syntax.ps1`: PowerShell syntax validation
+- **Requirements** (`deployment/common/requirements/`):
+  - `pyproject.toml`: Poetry dependency management
+  - `requirements-core.txt`: Core Python dependencies
+  - `requirements-cpu-fallback.txt`: CPU fallback dependencies
 
 ### Network Communication
 - Discovery: UDP broadcast or TCP scan on port 5000
@@ -110,8 +129,44 @@ C:\AIDemo\
 
 ## Deployment Process
 
-1. Run `setup_windows.ps1` on both Windows machines as administrator
-2. Copy client files to `C:\AIDemo\client\`
-3. Start demo clients on Windows machines
-4. Run `test_demo.py` from MacOS to validate setup
-5. Execute demos with `demo_control.py --prompt "..."`
+1. **Initial Setup**: Run `.\deployment\common\scripts\setup.ps1` on both Windows machines as administrator
+2. **Platform-Specific Setup**:
+   - Intel machines: `.\deployment\intel\scripts\prepare_intel.ps1`
+   - Snapdragon machines: `.\deployment\snapdragon\scripts\prepare_snapdragon.ps1`
+3. **Validation**: Run `.\deployment\common\validation\verify.ps1` to verify installation
+4. **Copy client files**: Deploy to `C:\AIDemo\client\`
+5. **Start demo clients**: Launch Windows demo clients
+6. **System Test**: Run `python src/control-hub/test_demo.py` from MacOS to validate setup
+7. **Execute Demos**: Run `python src/control-hub/demo_control.py --prompt "..."`
+
+## Project Structure
+
+```
+AI-image-gen-battle/
+├── src/                          # Core application code
+│   ├── control-hub/              # MacOS control application
+│   └── windows-client/           # Windows demo client
+├── deployment/                   # Deployment and setup scripts
+│   ├── common/                   # Shared deployment resources
+│   │   ├── scripts/              # Cross-platform PowerShell scripts
+│   │   ├── requirements/         # Python dependency files
+│   │   ├── validation/           # Testing and validation scripts
+│   │   └── docs/                 # Common documentation
+│   ├── intel/                    # Intel Core Ultra specific files
+│   │   ├── scripts/              # Intel optimization scripts
+│   │   ├── requirements/         # Intel-specific dependencies
+│   │   ├── tests/                # Intel platform tests
+│   │   ├── docs/                 # Intel documentation
+│   │   └── reports/              # Intel testing reports
+│   ├── snapdragon/               # Snapdragon X Elite specific files
+│   │   ├── scripts/              # Snapdragon optimization scripts
+│   │   ├── requirements/         # Snapdragon dependencies
+│   │   └── docs/                 # Snapdragon documentation
+│   └── fixes/                    # Troubleshooting and fixes
+│       ├── scripts/              # Fix and repair scripts
+│       ├── backup/               # Backup configurations
+│       └── docs/                 # Fix documentation
+├── docs/                         # Project documentation
+├── mockups/                      # HTML demo mockups
+└── *.md                          # Project documentation files
+```

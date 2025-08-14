@@ -14,20 +14,27 @@ This is a coordinated demonstration system that showcases Snapdragon X Elite's A
 
 ```
 AI-image-gen-battle/
-├── src/                   # Source code
-│   ├── control-hub/       # MacOS coordination scripts
-│   └── windows-client/    # Windows client with AI generation
-├── deployment/            # Setup and deployment scripts
-│   ├── setup.ps1          # Main Windows setup (with logging)
-│   ├── monitor.ps1        # Real-time setup monitoring
-│   ├── diagnose.ps1       # DirectML troubleshooting
-│   ├── prepare_models.ps1 # AI model download/preparation
-│   └── verify.ps1         # Setup verification
-├── docs/                  # Documentation
-│   ├── AI_IMPLEMENTATION.md     # AI architecture details
-│   ├── MODEL_ACQUISITION_GUIDE.md # Model download guide
-│   └── PERFORMANCE_BENCHMARKS.md  # Expected performance
-└── mockups/               # UI design mockups
+├── src/                          # Source code
+│   ├── control-hub/              # MacOS coordination scripts
+│   └── windows-client/           # Windows client with AI generation
+├── deployment/                   # Setup and deployment scripts
+│   ├── common/                   # Shared deployment resources
+│   │   ├── scripts/              # Cross-platform setup scripts
+│   │   ├── requirements/         # Core dependencies
+│   │   ├── validation/           # Testing and validation
+│   │   └── docs/                 # Common documentation
+│   ├── intel/                    # Intel Core Ultra specific
+│   │   ├── scripts/              # Intel optimization scripts
+│   │   ├── requirements/         # Intel dependencies
+│   │   ├── tests/                # Intel tests
+│   │   └── docs/                 # Intel documentation
+│   ├── snapdragon/               # Snapdragon X Elite specific
+│   │   ├── scripts/              # Snapdragon optimization scripts
+│   │   ├── requirements/         # Snapdragon dependencies
+│   │   └── docs/                 # Snapdragon documentation
+│   └── fixes/                    # Troubleshooting and patches
+├── docs/                         # Project documentation
+└── mockups/                      # UI design mockups
 ```
 
 ## Demo Flow

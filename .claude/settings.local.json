@@ -11,7 +11,11 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(git reset:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(poetry search:*)",
+      "Bash(poetry show:*)",
+      "Bash(poetry lock:*)",
+      "Bash(poetry update:*)"
     ],
     "deny": []
   },
