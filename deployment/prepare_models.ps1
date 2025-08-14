@@ -74,6 +74,36 @@ try {
     }
 }
 
+# Validate required Python packages are available
+Write-Host "Checking required Python packages..." -ForegroundColor Gray
+$requiredPackages = @("torch", "diffusers", "transformers", "optimum", "onnxruntime")
+$missingPackages = @()
+
+foreach ($package in $requiredPackages) {
+    try {
+        python -c "import $package" 2>$null | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            $missingPackages += $package
+        }
+    } catch {
+        $missingPackages += $package
+    }
+}
+
+if ($missingPackages.Count -gt 0) {
+    Write-Host "[ERROR] Missing required Python packages: $($missingPackages -join ', ')" -ForegroundColor Red
+    Write-Host "`n[QUICK FIX] Run this command to install missing packages:" -ForegroundColor Cyan
+    Write-Host ".\install_dependencies.ps1" -ForegroundColor White
+    Write-Host "`nThis will:" -ForegroundColor Yellow
+    Write-Host "- Auto-detect the best installation method (Poetry or pip)" -ForegroundColor White
+    Write-Host "- Install all required ML packages with correct versions" -ForegroundColor White
+    Write-Host "- Handle dependency conflicts automatically" -ForegroundColor White
+    Write-Host "- Verify installation success" -ForegroundColor White
+    exit 1
+} else {
+    Write-Host "[SUCCESS] All required packages available" -ForegroundColor Green
+}
+
 # Create models directory
 $modelsPath = "C:\AIDemo\models"
 if (-not (Test-Path $modelsPath)) {
