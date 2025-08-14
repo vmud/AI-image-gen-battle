@@ -67,50 +67,10 @@ if ($Resume) {
 Initialize-Logging
 
 # ============================================================================
-# ENHANCED OUTPUT FUNCTIONS
+# OUTPUT FUNCTIONS NOW LOADED FROM HELPERS FILE
 # ============================================================================
-
-function Write-StepProgress {
-    param([string]$Message)
-    $step = $script:checkpoint.Progress.CompletedSteps.Count + 1
-    $total = $script:config.TotalSteps
-    Write-Host "[$step/$total] $Message" -ForegroundColor Cyan
-    Write-Log -Message $Message -Component "Progress"
-}
-
-function Write-Success {
-    param([string]$Message)
-    Write-Host "[OK] $Message" -ForegroundColor Green
-    Write-Log -Message $Message -Level "Success"
-}
-
-function Write-Info {
-    param([string]$Message)
-    Write-Host "[i] $Message" -ForegroundColor Blue
-    Write-Log -Message $Message -Level "Info"
-}
-
-function Write-WarningMsg {
-    param([string]$Message)
-    Write-Host "[!] $Message" -ForegroundColor Yellow
-    Write-Log -Message $Message -Level "Warning"
-    $script:config.Warnings += $Message
-}
-
-function Write-ErrorMsg {
-    param([string]$Message)
-    Write-Host "[X] $Message" -ForegroundColor Red
-    Write-Log -Message $Message -Level "Error"
-    $script:config.Issues += $Message
-}
-
-function Write-VerboseInfo {
-    param([string]$Message)
-    if ($script:config.Verbose) {
-        Write-Host "[v] $Message" -ForegroundColor Gray
-        Write-Log -Message $Message -Level "Verbose"
-    }
-}
+# Note: Output functions (Write-StepProgress, Write-Success, etc.) are now
+# defined in error_recovery_helpers.ps1 to eliminate circular dependency
 
 # ============================================================================
 # ENHANCED DIRECTORY INITIALIZATION
