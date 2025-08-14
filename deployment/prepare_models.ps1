@@ -71,12 +71,28 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
     # Initialize Poetry usage flag
     $usePoetry = $true
     
-    # Check if Poetry is installed
+    # Check if Poetry is installed and working
     Write-Host "   Checking Poetry installation..." -ForegroundColor Gray
     try {
         $poetryVersion = poetry --version 2>$null
         if ($LASTEXITCODE -eq 0) {
             Write-Host "   [SUCCESS] Poetry found: $poetryVersion" -ForegroundColor Green
+            
+            # Verify Poetry environment is working
+            try {
+                $poetryPython = poetry run python --version 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "   [SUCCESS] Poetry environment working: $poetryPython" -ForegroundColor Green
+                } else {
+                    Write-Host "   [WARNING] Poetry environment broken (Python not accessible)" -ForegroundColor Yellow
+                    Write-Host "   [INFO] Run './fix_poetry_python.ps1' to repair the environment" -ForegroundColor Cyan
+                    throw "Poetry environment needs repair"
+                }
+            } catch {
+                Write-Host "   [WARNING] Poetry environment issue detected" -ForegroundColor Yellow
+                Write-Host "   [INFO] Run './fix_poetry_python.ps1' to repair the environment" -ForegroundColor Cyan
+                throw "Poetry environment needs repair"
+            }
         } else {
             throw "Poetry not found"
         }

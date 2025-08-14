@@ -42,12 +42,53 @@ catch {
 $deploymentDir = $PSScriptRoot
 Set-Location $deploymentDir
 
+# Verify Python compatibility before proceeding
+Write-Host "[INFO] Checking Python compatibility..." -ForegroundColor Yellow
+
+try {
+    $pythonVersion = python --version 2>$null
+    if ($pythonVersion -match "Python (\d+\.\d+)") {
+        $versionNum = [version]$matches[1]
+        if ($versionNum -ge [version]"3.11") {
+            Write-Host "[ERROR] Python $($matches[1]) detected - incompatible with DirectML!" -ForegroundColor Red
+            Write-Host "[SOLUTION] Please install Python 3.9 or 3.10 for Snapdragon compatibility" -ForegroundColor Yellow
+            Write-Host "[DOWNLOAD] https://www.python.org/downloads/" -ForegroundColor Cyan
+            Write-Host "[REPAIR] Run './fix_poetry_python.ps1' if you have compatible Python installed elsewhere" -ForegroundColor Cyan
+            exit 1
+        } elseif ($versionNum -lt [version]"3.9") {
+            Write-Host "[ERROR] Python $($matches[1]) detected - too old for ML packages!" -ForegroundColor Red  
+            Write-Host "[SOLUTION] Please install Python 3.9 or 3.10" -ForegroundColor Yellow
+            exit 1
+        } else {
+            Write-Host "[SUCCESS] Python $($matches[1]) is compatible" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "[ERROR] Could not determine Python version" -ForegroundColor Red
+        exit 1
+    }
+} catch {
+    Write-Host "[ERROR] Python not found in PATH" -ForegroundColor Red
+    Write-Host "[SOLUTION] Install Python 3.9 or 3.10 and add to PATH" -ForegroundColor Yellow
+    exit 1
+}
+
 # Configure Poetry for this project
 Write-Host "[INFO] Configuring Poetry settings..." -ForegroundColor Yellow
 
 # Create virtual environment in project directory for easier management
 poetry config virtualenvs.in-project true --local
 poetry config virtualenvs.prefer-active-python true --local
+
+# Ensure Poetry uses the detected compatible Python
+try {
+    Write-Host "[INFO] Setting Poetry to use current Python version..." -ForegroundColor Gray
+    poetry env use python
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[WARNING] Could not set Poetry Python - will use default" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Host "[WARNING] Could not configure Poetry Python - continuing with default" -ForegroundColor Yellow
+}
 
 # Configure package sources
 Write-Host "[INFO] Configuring PyTorch CPU source..." -ForegroundColor Yellow
