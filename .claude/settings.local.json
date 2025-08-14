@@ -6,8 +6,42 @@
       "Bash(mkdir:*)",
       "Bash(mv:*)",
       "Bash(rm:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)"
     ],
     "deny": []
+  },
+  "autoCommit": {
+    "enabled": true,
+    "triggerConditions": [
+      "completedFeature",
+      "fixedBug",
+      "refactoredCode",
+      "addedDocumentation",
+      "configurationChange",
+      "deploymentUpdate"
+    ],
+    "excludeFiles": [
+      "*.log",
+      "*.tmp",
+      "node_modules/*",
+      ".env*",
+      "*.pyc"
+    ],
+    "minimumChangeThreshold": 5,
+    "maxFilesPerCommit": 10
+  },
+  "pushRecommendations": {
+    "automatic": false,
+    "triggerConditions": [
+      "majorFeatureComplete",
+      "deploymentReady",
+      "multipleCommitsReady",
+      "endOfWorkSession"
+    ],
+    "requireConfirmation": true
   }
 }
