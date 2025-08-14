@@ -225,8 +225,8 @@ function New-DeploymentState {
         Configuration = @{
             OptimizationProfile = $OptimizationProfile
             LogPath = $LogPath
-            SkipModelDownload = $SkipModelDownload.ToBool()
-            UseHttpRange = $UseHttpRange.ToBool()
+            SkipModelDownload = $SkipModelDownload.IsPresent
+            UseHttpRange = $UseHttpRange.IsPresent
         }
     }
 }
@@ -574,8 +574,8 @@ Completed Steps: $($script:deploymentState.CompletedSteps.Count)/$($script:check
     
     if ($script:deploymentState.ErrorHistory.Count -gt 0) {
         $report += "`nERROR HISTORY:`n"
-        foreach ($error in $script:deploymentState.ErrorHistory) {
-            $report += "  ✗ $($error.Name): $($error.Error)`n"
+        foreach ($errorItem in $script:deploymentState.ErrorHistory) {
+            $report += "  ✗ $($errorItem.Name): $($errorItem.Error)`n"
         }
     }
     

@@ -852,6 +852,7 @@ function Test-Performance {
 import time
 import sys
 import os
+import threading
 
 # Add verbose flag
 verbose = $($script:config.Verbose.ToString().ToLower())
@@ -862,19 +863,34 @@ try:
     if verbose:
         print("-> Importing modules...")
     
-    # Test imports with timeout
-    import signal
+    # Test imports with timeout (Windows-compatible)
+    import_complete = threading.Event()
     
-    def timeout_handler(signum, frame):
-        raise TimeoutError("Import timeout")
+    def import_with_timeout():
+        global platform_detection, ai_pipeline
+        try:
+            from platform_detection import detect_platform
+            from ai_pipeline import AIImagePipeline
+            import_complete.set()
+        except Exception as e:
+            print(f"Import error: {e}")
+            import_complete.set()
     
-    signal.signal(signal.SIGALRM, timeout_handler)
-    signal.alarm(30)  # 30 second timeout
+    # Start import in separate thread with timeout
+    import_thread = threading.Thread(target=import_with_timeout)
+    import_thread.daemon = True
+    import_thread.start()
     
-    from platform_detection import detect_platform
-    from ai_pipeline import AIImagePipeline
+    # Wait for import with 30 second timeout
+    if not import_complete.wait(timeout=30):
+        raise TimeoutError("Import timeout after 30 seconds")
     
-    signal.alarm(0)  # Cancel timeout
+    # Check if imports succeeded
+    try:
+        from platform_detection import detect_platform
+        from ai_pipeline import AIImagePipeline
+    except ImportError as e:
+        raise ImportError(f"Failed to import modules: {e}")
     
     print("Detecting platform...")
     platform = detect_platform()
