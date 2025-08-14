@@ -93,19 +93,19 @@ function Test-HardwareRequirements {
     Write-StepProgress "Checking hardware requirements"
     
     try {
-        # Check if running on ARM64
+        # Check if running on ARM64 or AMD64 (Snapdragon X Elite reports as AMD64)
         Write-VerboseInfo "Querying processor architecture..."
         Show-Spinner "Checking architecture"
         $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
         Clear-Spinner
         
-        if ($arch -ne "ARM64") {
-            $script:issues += "Not running on ARM64 architecture (found: $arch)"
-            Write-ErrorMsg "Architecture: $arch (expected ARM64)"
+        if ($arch -ne "ARM64" -and $arch -ne "AMD64") {
+            $script:issues += "Not running on supported architecture (found: $arch, expected ARM64 or AMD64)"
+            Write-ErrorMsg "Architecture: $arch (expected ARM64 or AMD64)"
             return $false
         }
-        Write-Success "Architecture: ARM64"
-        Write-VerboseInfo "Architecture verified: $arch"
+        Write-Success "Architecture: $arch (Snapdragon compatible)"
+        Write-VerboseInfo "Architecture verified: $arch (Snapdragon X Elite reports as AMD64)"
         
         # Check for Snapdragon processor
         Write-VerboseInfo "Querying processor information via WMI..."
