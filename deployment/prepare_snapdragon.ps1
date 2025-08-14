@@ -248,7 +248,7 @@ function Install-Python {
             }
             Clear-Spinner
             
-            $downloadTime = [math]::Round((Get-Date - $downloadStart).TotalSeconds, 1)
+            $downloadTime = [math]::Round(((Get-Date) - $downloadStart).TotalSeconds, 1)
             Write-VerboseInfo "Download completed in $downloadTime seconds"
             
             Write-VerboseInfo "Starting Python installation (silent mode)..."
@@ -600,7 +600,7 @@ function Download-Models {
                 }
                 Clear-Spinner
                 
-                $downloadTime = [math]::Round((Get-Date - $downloadStart).TotalSeconds, 1)
+                $downloadTime = [math]::Round(((Get-Date) - $downloadStart).TotalSeconds, 1)
                 $downloadSpeed = [math]::Round(($model.SizeBytes / 1MB) / $downloadTime, 2)
                 
                 Write-Success "$($model.Name) downloaded"
