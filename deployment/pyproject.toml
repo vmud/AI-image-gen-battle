@@ -8,8 +8,9 @@ authors = ["AI Demo Team <demo@example.com>"]
 python = "^3.9,<3.11"
 
 # Core ML Framework - PyTorch with CPU support for Snapdragon compatibility
-torch = {version = "2.1.2", source = "pytorch-cpu"}
-torchvision = {version = "0.16.2", source = "pytorch-cpu"}
+# Platform-specific versions will be resolved on target Windows machines
+torch = {version = ">=2.1.0,<2.2.0", source = "pytorch-cpu"}
+torchvision = {version = ">=0.16.0,<0.17.0", source = "pytorch-cpu"}
 
 # HuggingFace Ecosystem - Compatible versions for stable operation
 huggingface_hub = "0.24.6"
@@ -19,8 +20,9 @@ accelerate = "0.25.0"
 safetensors = "0.4.1"
 
 # ONNX Runtime and Optimum for NPU acceleration
-optimum = {version = "1.16.2", extras = ["onnxruntime"]}
-onnxruntime = "^1.16.0"
+# Windows-compatible versions
+optimum = {version = ">=1.16.0,<1.17.0", extras = ["onnxruntime"]}
+onnxruntime = ">=1.16.0,<1.20.0"
 
 # Optional: Qualcomm AI Hub tools for Snapdragon optimization
 qai-hub = {version = "*", optional = true}
