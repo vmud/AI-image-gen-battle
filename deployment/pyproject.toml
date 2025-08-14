@@ -1,0 +1,62 @@
+[tool.poetry]
+name = "ai-demo-snapdragon"
+version = "1.0.0"
+description = "AI Image Generation Demo - Snapdragon vs Intel Performance Comparison"
+authors = ["AI Demo Team <demo@example.com>"]
+readme = "README.md"
+packages = [{include = "ai_demo", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.9,<3.11"
+# Core ML Framework - PyTorch with CPU support for Snapdragon compatibility
+torch = {version = "2.1.2", source = "pytorch-cpu"}
+torchvision = {version = "0.16.2", source = "pytorch-cpu"}
+
+# HuggingFace Ecosystem - Compatible versions for stable operation
+huggingface_hub = "0.20.3"
+transformers = "4.36.2"
+diffusers = "0.25.1"
+accelerate = "0.25.0"
+safetensors = "0.4.1"
+
+# ONNX Runtime and Optimum for NPU acceleration
+optimum = {version = "1.16.2", extras = ["onnxruntime"]}
+onnxruntime = "^1.16.0"
+
+# Optional: Qualcomm AI Hub tools for Snapdragon optimization
+qai-hub = {version = "*", optional = true}
+
+# Optional: QNN Runtime for NPU support (may not be available on all systems)
+onnxruntime-qnn = {version = "*", optional = true}
+
+[tool.poetry.extras]
+snapdragon = ["qai-hub", "onnxruntime-qnn"]
+full = ["qai-hub", "onnxruntime-qnn"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+isort = "^5.0.0"
+
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+prepare-models = "ai_demo.prepare_models:main"
+
+# Poetry configuration for dependency resolution
+[tool.poetry.solver]
+lazy-wheel = true
+
+# Ensure compatible package resolution
+[tool.poetry.dependencies.torch]
+markers = "platform_machine != 'arm64' or python_version >= '3.9'"
+
+[tool.poetry.dependencies.onnxruntime-qnn]
+markers = "platform_machine == 'arm64' and sys_platform == 'win32'"

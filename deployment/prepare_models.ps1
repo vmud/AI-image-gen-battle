@@ -65,74 +65,153 @@ pre-optimized models. These models are specifically tuned for the Hexagon NPU.
 
 "@ -ForegroundColor Cyan
 
-    # FORCE COMPLETE ENVIRONMENT REBUILD FOR COMPATIBILITY
-    Write-Host ">> REBUILDING ENVIRONMENT FOR NPU COMPATIBILITY..." -ForegroundColor Yellow
+    # POETRY-BASED DEPENDENCY MANAGEMENT FOR NPU COMPATIBILITY
+    Write-Host ">> SETTING UP POETRY-MANAGED DEPENDENCIES..." -ForegroundColor Yellow
     
-    Write-Host "   Uninstalling conflicting packages..." -ForegroundColor Gray
-    try {
-        pip uninstall -y torch torchvision diffusers transformers optimum huggingface_hub accelerate 2>$null | Out-Null
-        Write-Host "   [SUCCESS] Conflicting packages removed" -ForegroundColor Green
-    }
-    catch {
-        Write-Host "   [WARNING] Some packages could not be uninstalled (continuing...)" -ForegroundColor Yellow
-    }
+    # Initialize Poetry usage flag
+    $usePoetry = $true
     
-    Write-Host "   Installing PyTorch 2.1+ (REQUIRED for NPU)..." -ForegroundColor Yellow
+    # Check if Poetry is installed
+    Write-Host "   Checking Poetry installation..." -ForegroundColor Gray
     try {
-        pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu --quiet --force-reinstall
+        $poetryVersion = poetry --version 2>$null
         if ($LASTEXITCODE -eq 0) {
-            Write-Host "   [SUCCESS] PyTorch 2.1.2 installed" -ForegroundColor Green
+            Write-Host "   [SUCCESS] Poetry found: $poetryVersion" -ForegroundColor Green
         } else {
-            throw "PyTorch installation failed with exit code $LASTEXITCODE"
+            throw "Poetry not found"
         }
     }
     catch {
-        Write-Host "   [ERROR] PyTorch installation failed: $($_.Exception.Message)" -ForegroundColor Red
-        Write-Host "   [CRITICAL] Cannot proceed without PyTorch - exiting" -ForegroundColor Red
-        exit 1
-    }
-    
-    Write-Host "   Installing compatible HuggingFace ecosystem..." -ForegroundColor Yellow
-    pip install huggingface_hub==0.20.3 --quiet --force-reinstall
-    pip install transformers==4.36.2 --quiet --force-reinstall  
-    pip install diffusers==0.25.1 --quiet --force-reinstall
-    pip install accelerate==0.25.0 --quiet --force-reinstall
-    pip install safetensors==0.4.1 --quiet --force-reinstall
-    
-    Write-Host "   Installing optimum with ONNX support..." -ForegroundColor Yellow
-    pip install optimum[onnxruntime]==1.16.2 --quiet --force-reinstall
-    
-    # Install ONNX runtime with ARM64 optimization
-    Write-Host "Installing ONNX runtime with ARM64 optimization..." -ForegroundColor Yellow
-    
-    # Try QNN first, fallback to standard ARM64 optimized runtime
-    Write-Host "   Attempting QNN installation for NPU support..." -ForegroundColor Gray
-    $qnnInstalled = $false
-    try {
-        pip install onnxruntime-qnn --quiet --no-warn-script-location 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            $qnnInstalled = $true
-            Write-Host "   [SUCCESS] QNN runtime installed successfully" -ForegroundColor Green
+        Write-Host "   [INFO] Poetry not found, installing..." -ForegroundColor Yellow
+        
+        # Install Poetry using the official installer
+        try {
+            $installerScript = Invoke-WebRequest -Uri "https://install.python-poetry.org" -UseBasicParsing
+            $installerScript.Content | python -
+            
+            # Add Poetry to PATH for current session
+            $env:PATH = "$env:APPDATA\Python\Scripts;$env:PATH"
+            
+            Write-Host "   [SUCCESS] Poetry installed successfully" -ForegroundColor Green
         }
-    } catch {
-        Write-Host "   [WARNING] QNN runtime not available, using ARM64 optimized version" -ForegroundColor Yellow
+        catch {
+            Write-Host "   [ERROR] Poetry installation failed: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "   [FALLBACK] Using pip with improved dependency resolution..." -ForegroundColor Yellow
+            $usePoetry = $false
+        }
     }
     
-    if (-not $qnnInstalled) {
-        Write-Host "   Installing standard ARM64-optimized ONNX runtime..." -ForegroundColor Gray
-        pip install onnxruntime optimum[onnxruntime] --quiet
-        Write-Host "   [SUCCESS] ARM64 ONNX runtime installed" -ForegroundColor Green
-    } else {
-        pip install optimum[onnxruntime] --quiet
+    # Use Poetry if available, otherwise fallback to pip with better resolution
+    if ($usePoetry -ne $false) {
+        Write-Host "   Using Poetry for dependency management..." -ForegroundColor Cyan
+        
+        # Navigate to deployment directory where pyproject.toml is located
+        $originalPath = Get-Location
+        Set-Location $PSScriptRoot
+        
+        try {
+            # Install base dependencies
+            Write-Host "   Installing core ML dependencies..." -ForegroundColor Yellow
+            poetry install --no-dev --quiet
+            
+            # Install Snapdragon-specific extras if on ARM64
+            if ($Platform -eq "snapdragon") {
+                Write-Host "   Installing Snapdragon NPU optimizations..." -ForegroundColor Yellow
+                poetry install --extras snapdragon --quiet
+                
+                # Verify QNN installation success
+                $qnnCheck = poetry run python -c "import onnxruntime; print('QNNExecutionProvider' in onnxruntime.get_available_providers())" 2>$null
+                if ($qnnCheck -eq "True") {
+                    Write-Host "   [SUCCESS] QNN Provider available for NPU acceleration" -ForegroundColor Green
+                    $qnnInstalled = $true
+                } else {
+                    Write-Host "   [INFO] QNN Provider not available, using standard runtime" -ForegroundColor Yellow
+                    $qnnInstalled = $false
+                }
+            } else {
+                Write-Host "   Installing standard ONNX runtime..." -ForegroundColor Yellow
+                $qnnInstalled = $false
+            }
+            
+            Write-Host "   [SUCCESS] Poetry dependency installation complete" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "   [ERROR] Poetry installation failed: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "   [FALLBACK] Switching to pip installation..." -ForegroundColor Yellow
+            $usePoetry = $false
+        }
+        finally {
+            Set-Location $originalPath
+        }
     }
     
-    
-    # Download Qualcomm AI Hub CLI if not present (optional)
-    Write-Host "Installing Qualcomm AI Hub tools (optional)..." -ForegroundColor Yellow
-    pip install qai-hub --quiet 2>$null | Out-Null
+    # Fallback to pip with improved dependency resolution
+    if ($usePoetry -eq $false) {
+        Write-Host "   Using pip with enhanced dependency resolution..." -ForegroundColor Cyan
+        
+        # Clean environment first
+        Write-Host "   Cleaning conflicting packages..." -ForegroundColor Gray
+        pip uninstall -y torch torchvision diffusers transformers optimum huggingface_hub accelerate onnxruntime 2>$null | Out-Null
+        
+        # Install with pip-tools for better resolution
+        Write-Host "   Installing pip-tools for dependency resolution..." -ForegroundColor Gray
+        pip install pip-tools --quiet
+        
+        # Create requirements.txt from Poetry config
+        $requirementsContent = @"
+# Core ML Framework
+torch==2.1.2 --index-url https://download.pytorch.org/whl/cpu
+torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cpu
+
+# HuggingFace Ecosystem - Compatible versions
+huggingface_hub==0.20.3
+transformers==4.36.2
+diffusers==0.25.1
+accelerate==0.25.0
+safetensors==0.4.1
+
+# ONNX Runtime and Optimum
+onnxruntime>=1.16.0
+optimum[onnxruntime]==1.16.2
+"@
+        
+        $requirementsPath = "$env:TEMP\ai_demo_requirements.txt"
+        $requirementsContent | Out-File -FilePath $requirementsPath -Encoding UTF8
+        
+        try {
+            Write-Host "   Resolving and installing dependencies..." -ForegroundColor Yellow
+            pip-sync $requirementsPath --quiet
+            
+            # Try to install Snapdragon-specific packages
+            if ($Platform -eq "snapdragon") {
+                Write-Host "   Attempting Snapdragon NPU packages..." -ForegroundColor Yellow
+                pip install onnxruntime-qnn qai-hub --quiet 2>$null | Out-Null
+                if ($LASTEXITCODE -eq 0) {
+                    $qnnInstalled = $true
+                    Write-Host "   [SUCCESS] NPU packages installed" -ForegroundColor Green
+                } else {
+                    $qnnInstalled = $false
+                    Write-Host "   [INFO] NPU packages not available, using standard runtime" -ForegroundColor Yellow
+                }
+            }
+            
+            Write-Host "   [SUCCESS] Pip dependency installation complete" -ForegroundColor Green
+        }
+        catch {
+            Write-Host "   [ERROR] Pip installation failed: $($_.Exception.Message)" -ForegroundColor Red
+            exit 1
+        }
+        finally {
+            Remove-Item $requirementsPath -ErrorAction SilentlyContinue
+        }
+    }
     
     # VERIFY CRITICAL PACKAGES ARE CORRECTLY INSTALLED
     Write-Host ">> VERIFYING PACKAGE INSTALLATION..." -ForegroundColor Cyan
+    
+    # Determine which Python environment to use for verification
+    $pythonCommand = if ($usePoetry -ne $false) { "poetry run python" } else { "python" }
+    
     $verifyScript = @'
 import sys
 try:
@@ -170,7 +249,16 @@ except Exception as e:
     
     $tempVerifyPath = "$env:TEMP\verify_packages.py"
     $verifyScript | Out-File -FilePath $tempVerifyPath -Encoding UTF8
-    python $tempVerifyPath
+    
+    # Use appropriate Python command (Poetry or system Python)
+    if ($usePoetry -ne $false) {
+        Set-Location $PSScriptRoot
+        poetry run python $tempVerifyPath
+        Set-Location $originalPath
+    } else {
+        python $tempVerifyPath
+    }
+    
     Remove-Item $tempVerifyPath -ErrorAction SilentlyContinue
     
     if ($LASTEXITCODE -ne 0) {
@@ -476,8 +564,16 @@ except Exception as e:
         Write-Host "Downloading and optimizing model (this may take 10-15 minutes)..." -ForegroundColor Yellow
         Write-Host "Progress will be shown during model conversion..." -ForegroundColor Cyan
         
-        python $scriptPath
-        $pythonExitCode = $LASTEXITCODE
+        # Use Poetry environment if available
+        if ($usePoetry -ne $false) {
+            Set-Location $PSScriptRoot
+            poetry run python $scriptPath
+            $pythonExitCode = $LASTEXITCODE
+            Set-Location $originalPath
+        } else {
+            python $scriptPath
+            $pythonExitCode = $LASTEXITCODE
+        }
     }
     catch {
         Write-Host "[ERROR] Failed to create or execute Python script: $($_.Exception.Message)" -ForegroundColor Red
@@ -598,8 +694,16 @@ except Exception as e:
         Write-Host "Downloading SDXL model (6.9GB - this will take several minutes)..." -ForegroundColor Yellow
         Write-Host "Please be patient, large model download in progress..." -ForegroundColor Cyan
         
-        python $scriptPath
-        $pythonExitCode = $LASTEXITCODE
+        # Use Poetry environment if available
+        if ($usePoetry -ne $false) {
+            Set-Location $PSScriptRoot
+            poetry run python $scriptPath
+            $pythonExitCode = $LASTEXITCODE
+            Set-Location $originalPath
+        } else {
+            python $scriptPath
+            $pythonExitCode = $LASTEXITCODE
+        }
     }
     catch {
         Write-Host "[ERROR] Failed to create or execute Python script: $($_.Exception.Message)" -ForegroundColor Red
