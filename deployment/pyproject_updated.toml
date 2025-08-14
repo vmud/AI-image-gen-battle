@@ -1,0 +1,173 @@
+[tool.poetry]
+name = "ai-demo-snapdragon"
+version = "1.0.0"
+description = "AI Image Generation Demo - Snapdragon vs Intel Performance Comparison"
+authors = ["AI Demo Team <demo@example.com>"]
+readme = "../README.md"
+packages = [{include = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.9,<3.11"
+
+# === CORE DEPENDENCIES (MISSING FROM ORIGINAL) ===
+# Critical packages required by source code but missing from original pyproject.toml
+numpy = ">=1.21.0,<2.0.0"           # Required by ai_pipeline.py:12
+pillow = ">=8.0.0,<11.0.0"          # Required by ai_pipeline.py:13, demo_client.py:24
+requests = ">=2.25.0,<3.0.0"        # Required by demo_control.py:86
+psutil = ">=5.8.0"                  # Required by demo_client.py:25
+
+# === WEB FRAMEWORK (MISSING FROM ORIGINAL) ===
+# Flask ecosystem required by demo_client.py but not in original pyproject.toml
+flask = ">=2.0.0,<3.0.0"            # Required by demo_client.py:20
+flask-socketio = ">=5.0.0,<6.0.0"   # Required by demo_client.py:21
+
+# === CORE ML FRAMEWORK ===
+# PyTorch CPU base - compatible with both platforms
+torch = {version = "2.1.2", source = "pytorch-cpu"}
+torchvision = {version = "0.16.2", source = "pytorch-cpu"}
+
+# === HUGGINGFACE ECOSYSTEM ===
+# Existing versions validated and maintained
+huggingface_hub = "0.24.6"
+transformers = "4.36.2"
+diffusers = "0.25.1"
+accelerate = "0.25.0"
+safetensors = "0.4.1"
+
+# === ONNX RUNTIME BASE ===
+# Base ONNX support for both platforms
+onnxruntime = ">=1.16.0,<1.17.0"
+optimum = {version = "1.16.2", extras = ["onnxruntime"]}
+
+# === SNAPDRAGON-SPECIFIC PACKAGES (OPTIONAL) ===
+# NPU acceleration for ARM64 Snapdragon X Elite
+onnxruntime-qnn = {version = "*", optional = true, markers = "platform_machine == 'ARM64'"}
+qai-hub = {version = "*", optional = true, markers = "platform_machine == 'ARM64'"}  
+winml = {version = ">=1.0.0", optional = true, markers = "sys_platform == 'win32' and platform_machine == 'ARM64'"}
+
+# === INTEL-SPECIFIC PACKAGES (OPTIONAL) ===
+# DirectML acceleration for x86_64 Intel processors
+torch-directml = {version = ">=1.12.0", optional = true, markers = "sys_platform == 'win32' and platform_machine == 'AMD64'"}
+onnxruntime-directml = {version = ">=1.16.0", optional = true, markers = "sys_platform == 'win32' and platform_machine == 'AMD64'"}
+intel-extension-for-pytorch = {version = ">=2.0.0", optional = true, markers = "platform_machine == 'AMD64'"}
+
+# === DEVELOPMENT UTILITIES ===
+# Tools for dependency management and deployment
+pip-tools = {version = ">=7.0.0", optional = true}
+
+[tool.poetry.extras]
+# === PLATFORM-SPECIFIC EXTRAS ===
+# Snapdragon X Elite NPU acceleration stack
+snapdragon = [
+    "onnxruntime-qnn",    # Qualcomm Neural Network backend
+    "qai-hub",            # Qualcomm AI Hub optimization tools
+    "winml"               # Windows Machine Learning for NPU
+]
+
+# Intel Core Ultra DirectML acceleration stack  
+intel = [
+    "torch-directml",                    # DirectML PyTorch acceleration
+    "onnxruntime-directml",             # DirectML ONNX Runtime
+    "intel-extension-for-pytorch"       # Intel CPU/GPU optimizations
+]
+
+# Install everything (for development/testing)
+full = [
+    "onnxruntime-qnn", 
+    "qai-hub", 
+    "winml",
+    "torch-directml", 
+    "onnxruntime-directml", 
+    "intel-extension-for-pytorch",
+    "pip-tools"
+]
+
+# Development tools
+dev = ["pip-tools"]
+
+[tool.poetry.group.dev.dependencies]
+# Development and testing dependencies
+pytest = "^7.0.0"
+black = "^23.0.0"  
+isort = "^5.0.0"
+mypy = "^1.0.0"
+flake8 = "^6.0.0"
+
+[tool.poetry.group.deployment.dependencies]
+# Deployment and packaging tools
+pip-tools = "^7.0.0"
+build = "^0.10.0"
+
+# === PYTORCH CPU SOURCE ===
+[[tool.poetry.source]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+priority = "supplemental"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+# === TOOL CONFIGURATION ===
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 100
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+# === INSTALLATION INSTRUCTIONS ===
+
+# Platform-specific installation commands:
+#
+# Snapdragon X Elite (ARM64):
+#   poetry install --extras snapdragon
+#   
+# Intel Core Ultra (x86_64):  
+#   poetry install --extras intel
+#
+# CPU-only fallback (both platforms):
+#   poetry install
+#
+# Development environment:
+#   poetry install --extras full --with dev,deployment
+#
+# Verify installation:
+#   poetry run python -c "import numpy, torch, diffusers; print('Core deps: OK')"
+#   poetry run python -c "import platform_detection; platform_detection.main()"

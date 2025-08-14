@@ -1,0 +1,31 @@
+# Snapdragon X Elite (ARM64) Requirements
+# NPU Acceleration Pipeline: ONNX Runtime + QNN Backend
+# Platform: Windows 11 ARM64
+# Target: 3-5 second generation times with INT8 models
+
+# === INCLUDE CORE DEPENDENCIES ===
+-r requirements-core.txt
+
+# === SNAPDRAGON NPU ACCELERATION ===
+# Qualcomm Neural Network backend for NPU acceleration
+onnxruntime-qnn; platform_machine == "ARM64"
+
+# Qualcomm AI Hub optimization tools
+# Note: May require manual installation from Qualcomm Developer Portal
+qai-hub; platform_machine == "ARM64"
+
+# Windows Machine Learning for NPU support
+winml>=1.0.0; sys_platform == "win32" and platform_machine == "ARM64"
+
+# === ADDITIONAL SNAPDRAGON OPTIMIZATIONS ===
+# ARM64-compatible packages that may provide additional optimizations
+# opencv-python>=4.5.0  # Uncomment if needed for image processing
+
+# === INSTALLATION NOTES FOR SNAPDRAGON ===
+# 1. Install order: Core deps → Platform-specific → Verify NPU
+# 2. Some Qualcomm packages may require manual download/installation
+# 3. Fallback: Remove platform-specific packages and use CPU-only
+# 4. Models: Download INT8 quantized models (~1.5GB total)
+#
+# Verification command:
+# python -c "import onnxruntime as ort; print('QNN available:', 'QNNExecutionProvider' in ort.get_available_providers())"

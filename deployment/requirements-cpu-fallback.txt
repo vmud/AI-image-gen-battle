@@ -1,0 +1,37 @@
+# CPU-Only Fallback Requirements
+# For use when platform-specific acceleration fails or is unavailable
+# Compatible with both Snapdragon ARM64 and Intel x86_64
+# Performance: Slower but reliable across all platforms
+
+# === INCLUDE CORE DEPENDENCIES ===
+-r requirements-core.txt
+
+# === CPU-ONLY OPERATION ===
+# No platform-specific acceleration packages
+# Uses base PyTorch CPU and ONNX Runtime CPU
+
+# === REDUCED PERFORMANCE SETTINGS ===
+# When using CPU-only mode, consider these optimizations in code:
+# - Reduce image resolution (512x512 instead of 768x768)
+# - Reduce inference steps (15-20 instead of 25-30)
+# - Use faster schedulers (DPM-Solver++ single-step)
+# - Enable CPU optimizations via environment variables
+
+# === CPU OPTIMIZATION PACKAGES (OPTIONAL) ===
+# Uncomment these for better CPU performance:
+# mkl>=2021.0; platform_machine == "AMD64"  # Intel Math Kernel Library
+# openblas; platform_machine == "ARM64"     # OpenBLAS for ARM64
+
+# === INSTALLATION NOTES FOR CPU FALLBACK ===
+# 1. This configuration works on any Windows machine
+# 2. No GPU/NPU drivers required
+# 3. Significantly slower performance (60-120 seconds per image)
+# 4. Useful for testing, development, or incompatible hardware
+# 5. Can be used as emergency fallback during demos
+#
+# Performance expectations:
+# - Snapdragon ARM64: 60-90 seconds per 512x512 image
+# - Intel x86_64: 45-75 seconds per 512x512 image
+#
+# Verification command:
+# python -c "import torch; import onnxruntime; print('CPU fallback ready')"

@@ -1,0 +1,38 @@
+# Intel Core Ultra (x86_64) Requirements  
+# DirectML Acceleration Pipeline: PyTorch + DirectML + GPU/iGPU
+# Platform: Windows 10 1903+ or Windows 11 x86_64
+# Target: 35-45 second generation times with FP16 models
+
+# === INCLUDE CORE DEPENDENCIES ===
+-r requirements-core.txt
+
+# === INTEL DIRECTML ACCELERATION ===
+# DirectML acceleration for PyTorch (requires Windows + DirectX 12)
+torch-directml>=1.12.0; sys_platform == "win32" and platform_machine == "AMD64"
+
+# DirectML ONNX Runtime for additional model support
+onnxruntime-directml>=1.16.0; sys_platform == "win32" and platform_machine == "AMD64"
+
+# Intel-specific PyTorch optimizations
+intel-extension-for-pytorch>=2.0.0; platform_machine == "AMD64"
+
+# === INTEL PERFORMANCE OPTIMIZATIONS ===
+# Additional packages that may improve Intel performance
+# mkl>=2021.0  # Uncomment for Intel Math Kernel Library optimizations
+# intel-openmp  # Uncomment for Intel OpenMP optimizations
+
+# === DIRECTML SYSTEM REQUIREMENTS ===
+# - Windows 10 version 1903+ or Windows 11
+# - DirectX 12 compatible GPU (integrated or discrete)
+# - Visual C++ 2019 Redistributable or newer
+# - WDDM 2.6+ display driver
+
+# === INSTALLATION NOTES FOR INTEL ===
+# 1. Install order: Core deps → DirectML packages → Verify GPU access
+# 2. DirectML requires compatible GPU drivers and DirectX 12 support
+# 3. Fallback: Remove DirectML packages and use CPU-only PyTorch
+# 4. Models: Download FP16 SDXL models (~6.9GB total)
+#
+# Verification commands:
+# python -c "import torch_directml; print('DirectML available:', torch_directml.is_available())"
+# python -c "import torch_directml; print('Device name:', torch_directml.device_name(0) if torch_directml.is_available() else 'N/A')"

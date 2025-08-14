@@ -1,0 +1,33 @@
+# Core Dependencies - All Platforms
+# Generated from pyproject_updated.toml for pip fallback installation
+# Compatible with Python 3.9-3.10
+
+# === CORE PYTHON PACKAGES ===
+numpy>=1.21.0,<2.0.0
+pillow>=8.0.0,<11.0.0
+requests>=2.25.0,<3.0.0
+psutil>=5.8.0
+
+# === WEB FRAMEWORK ===
+flask>=2.0.0,<3.0.0
+flask-socketio>=5.0.0,<6.0.0
+
+# === ML FRAMEWORK BASE ===
+# PyTorch CPU versions for maximum compatibility
+--index-url https://download.pytorch.org/whl/cpu
+torch==2.1.2
+torchvision==0.16.2
+
+# === HUGGINGFACE ECOSYSTEM ===
+huggingface_hub==0.24.6
+transformers==4.36.2
+diffusers==0.25.1
+accelerate==0.25.0
+safetensors==0.4.1
+
+# === ONNX RUNTIME BASE ===
+onnxruntime>=1.16.0,<1.17.0
+optimum[onnxruntime]==1.16.2
+
+# === DEPLOYMENT UTILITIES ===
+pip-tools>=7.0.0
