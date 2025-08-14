@@ -540,7 +540,7 @@ function Install-CoreDependencies {
         & python -m pip install --upgrade pip --quiet
         
         # Install core dependencies from requirements file
-        $requirementsPath = "$PSScriptRoot\requirements-core.txt"
+        $requirementsPath = "$PSScriptRoot\..\requirements\requirements-core.txt"
         if (Test-Path $requirementsPath) {
             Write-Info "Installing from requirements-core.txt..."
             & pip install -r $requirementsPath --quiet
@@ -584,14 +584,16 @@ function Install-IntelAcceleration {
     $accelerationStages = @(
         @{
             Name = "PyTorch CPU"
-            Packages = @("torch==2.1.2", "torchvision==0.16.2")
+            Packages = @("torch>=1.13.0,<2.1.0", "torchvision>=0.14.0,<0.16.0")
             IndexUrl = "https://download.pytorch.org/whl/cpu"
             Critical = $true
         },
         @{
             Name = "DirectML"
             Packages = @("torch-directml>=1.12.0")
-            Critical = $false
+            IndexUrl = "https://download.pytorch.org/whl/directml"
+            PreRelease = $true
+            Critical = $true
         },
         @{
             Name = "ONNX DirectML"
@@ -601,7 +603,7 @@ function Install-IntelAcceleration {
         @{
             Name = "Intel Extensions"
             Packages = @("intel-extension-for-pytorch>=2.0.0")
-            Critical = $false
+            Critical = $true
         },
         @{
             Name = "AI/ML Libraries"
@@ -622,26 +624,49 @@ function Install-IntelAcceleration {
     foreach ($stage in $accelerationStages) {
         Write-Info "Installing $($stage.Name)..."
         
+        # Pre-installation validation
+        Write-VerboseInfo "Running pip check before installing $($stage.Name)..."
+        & pip check | Out-String | Write-VerboseInfo
+        
         try {
             foreach ($package in $stage.Packages) {
-                Write-VerboseInfo "Installing $package"
+                Write-Info "Installing $package..."
+                
+                $installArgs = @($package)
                 
                 if ($stage.IndexUrl) {
-                    & pip install $package --index-url $stage.IndexUrl --quiet
-                } else {
-                    & pip install $package --quiet
+                    $installArgs += "--index-url"
+                    $installArgs += $stage.IndexUrl
                 }
                 
-                if ($LASTEXITCODE -ne 0) {
-                    throw "Package installation failed: $package"
+                if ($stage.PreRelease) {
+                    $installArgs += "--pre"
                 }
+                
+                # Remove --quiet to show installation errors
+                Write-VerboseInfo "Running: pip install $($installArgs -join ' ')"
+                & pip install @installArgs
+                
+                if ($LASTEXITCODE -ne 0) {
+                    throw "Package installation failed: $package (Exit code: $LASTEXITCODE)"
+                }
+                
+                Write-VerboseInfo "Successfully installed: $package"
             }
             
-            Write-Success "$($stage.Name) installed"
+            # Post-installation validation
+            Write-VerboseInfo "Running pip check after installing $($stage.Name)..."
+            & pip check | Out-String | Write-VerboseInfo
+            
+            Write-Success "$($stage.Name) installed successfully"
             
         } catch {
+            $errorMsg = "Package installation failed: $($stage.Name) - $_"
+            Write-VerboseInfo "Detailed error: $errorMsg"
+            
             if ($stage.Critical) {
                 Write-ErrorMsg "Critical package failed: $($stage.Name) - $_"
+                Write-ErrorMsg "This will prevent DirectML acceleration from working properly"
                 $success = $false
                 break
             } else {
@@ -650,20 +675,126 @@ function Install-IntelAcceleration {
         }
     }
     
-    # Verify DirectML availability
+    # Comprehensive DirectML verification
     if ($success) {
-        Write-Info "Verifying DirectML availability..."
+        Write-Info "Performing comprehensive DirectML verification..."
+        
+        # Final dependency check
+        Write-VerboseInfo "Running final pip check..."
+        $pipCheckOutput = & pip check 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Success "All package dependencies are satisfied"
+        } else {
+            Write-WarningMsg "Package dependency issues detected:"
+            $pipCheckOutput | ForEach-Object { Write-VerboseInfo "  $_" }
+        }
+        
         $verifyScript = @"
+import sys
+import os
+
+print('=== DirectML Verification Report ===')
+print(f'Python version: {sys.version}')
+print(f'Python executable: {sys.executable}')
+
+# Test torch import
+try:
+    import torch
+    print(f'PyTorch version: {torch.__version__}')
+    print(f'PyTorch CUDA available: {torch.cuda.is_available()}')
+except ImportError as e:
+    print(f'ERROR: Cannot import PyTorch: {e}')
+    sys.exit(1)
+
+# Test DirectML import and functionality
 try:
     import torch_directml
-    dml = torch_directml.device()
-    print(f'SUCCESS: DirectML device available: {torch_directml.device_name(0)}')
+    print(f'DirectML version: {torch_directml.__version__ if hasattr(torch_directml, "__version__") else "Unknown"}')
+    
+    # Test device creation
+    dml_device = torch_directml.device()
+    print(f'SUCCESS: DirectML device created: {dml_device}')
+    
+    # Get device name
+    try:
+        device_name = torch_directml.device_name(0)
+        print(f'DirectML device name: {device_name}')
+    except:
+        print('DirectML device name: Not available')
+    
+    # Test tensor operations
+    print('Testing DirectML tensor operations...')
+    test_tensor = torch.ones(100, 100).to(dml_device)
+    result = torch.mm(test_tensor, test_tensor)
+    print(f'DirectML tensor test: SUCCESS (result shape: {result.shape})')
+    
+    # Test memory allocation
+    try:
+        large_tensor = torch.randn(1000, 1000).to(dml_device)
+        print('DirectML memory allocation: SUCCESS')
+        del large_tensor
+    except Exception as e:
+        print(f'DirectML memory allocation: WARNING - {e}')
+    
+    print('SUCCESS: DirectML is fully functional')
+    
+except ImportError as e:
+    print(f'ERROR: Cannot import DirectML: {e}')
+    print('DirectML acceleration will not be available')
+    print('The system will fall back to CPU-only processing')
 except Exception as e:
-    print(f'WARNING: DirectML not available: {e}')
-    print('Falling back to CPU acceleration')
+    print(f'ERROR: DirectML test failed: {e}')
+    print('DirectML may be installed but not functioning properly')
+    import traceback
+    traceback.print_exc()
+
+# Test Intel Extensions
+try:
+    import intel_extension_for_pytorch as ipex
+    print(f'Intel Extension for PyTorch: Available')
+    print(f'Intel Extension version: {ipex.__version__ if hasattr(ipex, "__version__") else "Unknown"}')
+except ImportError:
+    print('Intel Extension for PyTorch: Not available (will use standard PyTorch)')
+
+# Test ONNX Runtime DirectML
+try:
+    import onnxruntime as ort
+    providers = ort.get_available_providers()
+    print(f'ONNX Runtime providers: {", ".join(providers)}')
+    if 'DmlExecutionProvider' in providers:
+        print('ONNX Runtime DirectML: Available')
+    else:
+        print('ONNX Runtime DirectML: Not available')
+except ImportError:
+    print('ONNX Runtime: Not available')
+
+print('=== End Verification Report ===')
 "@
         
-        $verifyScript | & python
+        Write-VerboseInfo "Running DirectML verification script..."
+        $verificationOutput = $verifyScript | & python 2>&1
+        $verificationOutput | ForEach-Object {
+            if ($_ -match "^SUCCESS:") {
+                Write-Success $_.Replace("SUCCESS: ", "")
+            } elseif ($_ -match "^ERROR:") {
+                Write-ErrorMsg $_.Replace("ERROR: ", "")
+            } elseif ($_ -match "^WARNING:") {
+                Write-WarningMsg $_.Replace("WARNING: ", "")
+            } else {
+                Write-Info $_
+            }
+        }
+        
+        # Check if DirectML verification was successful
+        if ($verificationOutput -match "SUCCESS: DirectML is fully functional") {
+            Write-Success "DirectML verification completed successfully"
+        } elseif ($verificationOutput -match "DirectML acceleration will not be available") {
+            Write-WarningMsg "DirectML not available - falling back to CPU processing"
+            Write-WarningMsg "Performance will be significantly slower without GPU acceleration"
+        } else {
+            Write-WarningMsg "DirectML verification completed with issues"
+            Write-Info "Review the verification output above for details"
+        }
     }
     
     return $success
