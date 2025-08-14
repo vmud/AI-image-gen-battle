@@ -40,7 +40,7 @@ function Write-Progress {
     Write-Host "`n[$script:currentStep/$script:totalSteps] $Message" -ForegroundColor Magenta
     Write-Progress -Activity "Snapdragon Demo Setup" -Status $Message -PercentComplete $percent
     if ($script:Verbose) {
-        Write-Host ("─" * 60) -ForegroundColor DarkGray
+        Write-Host ("-" * 60) -ForegroundColor DarkGray
     }
 }
 
@@ -132,10 +132,10 @@ function Test-HardwareRequirements {
         Write-VerboseInfo "Total physical memory: $($memInfo.TotalPhysicalMemory) bytes"
         
         if ($ram -lt 16) {
-            $script:warnings += "RAM below recommended 16GB: ${ram}GB"
-            Write-Warning "RAM: ${ram}GB (16GB+ recommended)"
+            $script:warnings += "RAM below recommended 16GB: $($ram)GB"
+            Write-Warning "RAM: $($ram)GB (16GB+ recommended)"
         } else {
-            Write-Success "RAM: ${ram}GB"
+            Write-Success "RAM: $($ram)GB"
         }
         
         # Check disk space
@@ -146,14 +146,14 @@ function Test-HardwareRequirements {
         $totalSpace = [math]::Round(($drive.Used + $drive.Free) / 1GB, 2)
         Clear-Spinner
         
-        Write-VerboseInfo "Disk C: - Total: ${totalSpace}GB, Free: ${freeSpace}GB"
+        Write-VerboseInfo "Disk C: - Total: $($totalSpace)GB, Free: $($freeSpace)GB"
         
         if ($freeSpace -lt 3) {
-            $script:issues += "Insufficient disk space: ${freeSpace}GB (3GB required)"
-            Write-Error "Free space: ${freeSpace}GB"
+            $script:issues += "Insufficient disk space: $($freeSpace)GB (3GB required)"
+            Write-Error "Free space: $($freeSpace)GB"
             return $false
         }
-        Write-Success "Free space: ${freeSpace}GB"
+        Write-Success "Free space: $($freeSpace)GB"
         
         # Check for Hexagon NPU
         Write-VerboseInfo "Searching for Hexagon NPU devices..."
@@ -244,7 +244,7 @@ function Install-Python {
                     $percent = $_.ProgressPercentage
                     $received = [math]::Round($_.BytesReceived / 1MB, 2)
                     $total = [math]::Round($_.TotalBytesToReceive / 1MB, 2)
-                    Show-Spinner "Downloading: ${received}MB / ${total}MB ($percent%)"
+                    Show-Spinner "Downloading: $($received)MB / $($total)MB ($percent%)"
                 }
             }
             
@@ -606,7 +606,7 @@ function Download-Models {
                         
                         # Update every 5% or on completion
                         if ($percent -ge ($lastPercent + 5) -or $percent -eq 100) {
-                            Write-Host "`r  ⬇ Downloading: ${received}MB / ${total}MB ($percent%)" -NoNewline -ForegroundColor Yellow
+                            Write-Host "`r  ⬇ Downloading: $($received)MB / $($total)MB ($percent%)" -NoNewline -ForegroundColor Yellow
                             $lastPercent = $percent
                         }
                     }
@@ -624,7 +624,7 @@ function Download-Models {
                 $downloadSpeed = [math]::Round(($model.SizeBytes / 1MB) / $downloadTime, 2)
                 
                 Write-Success "$($model.Name) downloaded"
-                Write-VerboseInfo "Download completed in $downloadTime seconds (${downloadSpeed}MB/s)"
+                Write-VerboseInfo "Download completed in $downloadTime seconds ($($downloadSpeed)MB/s)"
                 
                 # Verify file size
                 $actualSize = (Get-Item $outputFile).Length
@@ -905,7 +905,7 @@ HARDWARE STATUS:
 
   Processor: $($cpu.Name)
   Architecture: $($env:PROCESSOR_ARCHITECTURE)
-  RAM: ${ram}GB
+  RAM: $($ram)GB
   
 "@
     
