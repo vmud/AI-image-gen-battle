@@ -1,7 +1,7 @@
 # Python Version Compatibility Fix
 
-## Problem
-After uninstalling Python 3.11, Poetry is still trying to use the old Python installation path, causing package verification failures.
+## Problem: "no python at C:\Program Files\Python311\python.exe"
+After uninstalling Python 3.11, the system is still trying to use the old Python installation path, causing package verification failures and script errors.
 
 ## Root Cause
 - Python 3.11+ is **incompatible** with DirectML on Windows
@@ -10,9 +10,18 @@ After uninstalling Python 3.11, Poetry is still trying to use the old Python ins
 
 ## Quick Fix Solutions
 
-### Option 1: Automated Repair (Recommended)
+### Option 1: Complete Path Cleanup (Recommended for "no python at..." error)
 ```powershell
-# Run the automated repair script
+# Run the comprehensive path cleaner
+.\fix_python_path.ps1
+
+# For Windows users who prefer double-click:
+# Double-click: fix-python-path.bat
+```
+
+### Option 2: Poetry-Specific Repair
+```powershell
+# Run the Poetry environment repair script
 .\fix_poetry_python.ps1
 
 # If Poetry environment is working but you want to force recreation:
@@ -22,7 +31,7 @@ After uninstalling Python 3.11, Poetry is still trying to use the old Python ins
 .\fix_poetry_python.ps1 -PythonPath "C:\Python310\python.exe"
 ```
 
-### Option 2: Manual Poetry Reset
+### Option 3: Manual Poetry Reset
 ```powershell
 # Remove broken Poetry environment
 poetry env remove --all
@@ -39,7 +48,7 @@ poetry env use C:\Python39\python.exe
 poetry install --no-dev
 ```
 
-### Option 3: Fresh Poetry Installation
+### Option 4: Fresh Poetry Installation
 ```powershell
 # Uninstall Poetry
 pip uninstall poetry

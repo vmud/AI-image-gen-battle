@@ -45,6 +45,35 @@ if (Test-Path $venvPath) {
     exit 1
 }
 
+# Additional Python installation validation
+Write-Host "Validating Python installation..." -ForegroundColor Gray
+try {
+    python --version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Python command failed"
+    }
+} catch {
+    Write-Host "[ERROR] Python installation issue detected!" -ForegroundColor Red
+    
+    # Check for specific Python 3.11 path error
+    $currentPath = $env:PATH
+    if ($currentPath -like "*Python311*" -or $currentPath -like "*Program Files\Python311*") {
+        Write-Host "[DETECTED] Old Python 3.11 references found in PATH" -ForegroundColor Yellow
+        Write-Host "`n[QUICK FIX] Run this command to clean up:" -ForegroundColor Cyan
+        Write-Host ".\fix_python_path.ps1" -ForegroundColor White
+        Write-Host "`nThis will:" -ForegroundColor Yellow
+        Write-Host "- Remove broken Python 3.11 references from PATH" -ForegroundColor White
+        Write-Host "- Find and configure compatible Python (3.9 or 3.10)" -ForegroundColor White
+        Write-Host "- Fix Poetry environment automatically" -ForegroundColor White
+        Write-Host "- Clean Windows registry entries" -ForegroundColor White
+        exit 1
+    } else {
+        Write-Host "Please install Python 3.9 or 3.10 and ensure it's in your PATH" -ForegroundColor Yellow
+        Write-Host "Download from: https://www.python.org/downloads/" -ForegroundColor Cyan
+        exit 1
+    }
+}
+
 # Create models directory
 $modelsPath = "C:\AIDemo\models"
 if (-not (Test-Path $modelsPath)) {
