@@ -25,15 +25,15 @@ $script:warnings = @()
 
 # Color output functions
 function Write-Success { Write-Host "[OK] $args" -ForegroundColor Green }
-function Write-Error { Write-Host "[X] $args" -ForegroundColor Red }
-function Write-Warning { Write-Host "[!] $args" -ForegroundColor Yellow }
+function Write-ErrorMsg { Write-Host "[X] $args" -ForegroundColor Red }
+function Write-WarningMsg { Write-Host "[!] $args" -ForegroundColor Yellow }
 function Write-Info { Write-Host "[i] $args" -ForegroundColor Cyan }
 function Write-VerboseInfo {
     if ($script:Verbose) {
         Write-Host "  -> $args" -ForegroundColor DarkGray
     }
 }
-function Write-Progress {
+function Write-StepProgress {
     param($Message)
     $script:currentStep++
     $percent = [math]::Round(($script:currentStep / $script:totalSteps) * 100)
@@ -64,7 +64,7 @@ function Clear-Spinner {
 
 # Create required directories
 function Initialize-Directories {
-    Write-Progress "Creating directory structure"
+    Write-StepProgress "Creating directory structure"
     
     $dirs = @(
         "C:\AIDemo",
@@ -90,7 +90,7 @@ function Initialize-Directories {
 
 # Check hardware requirements
 function Test-HardwareRequirements {
-    Write-Progress "Checking hardware requirements"
+    Write-StepProgress "Checking hardware requirements"
     
     try {
         # Check if running on ARM64
@@ -101,7 +101,7 @@ function Test-HardwareRequirements {
         
         if ($arch -ne "ARM64") {
             $script:issues += "Not running on ARM64 architecture (found: $arch)"
-            Write-Error "Architecture: $arch (expected ARM64)"
+            Write-ErrorMsg "Architecture: $arch (expected ARM64)"
             return $false
         }
         Write-Success "Architecture: ARM64"
@@ -117,7 +117,7 @@ function Test-HardwareRequirements {
         
         if ($cpu.Name -notmatch "Snapdragon|Qualcomm") {
             $script:issues += "Not a Snapdragon processor: $($cpu.Name)"
-            Write-Error "Processor: $($cpu.Name)"
+            Write-ErrorMsg "Processor: $($cpu.Name)"
             return $false
         }
         Write-Success "Processor: $($cpu.Name)"
@@ -133,7 +133,7 @@ function Test-HardwareRequirements {
         
         if ($ram -lt 16) {
             $script:warnings += "RAM below recommended 16GB: $($ram)GB"
-            Write-Warning "RAM: $($ram)GB (16GB+ recommended)"
+            Write-WarningMsg "RAM: $($ram)GB (16GB+ recommended)"
         } else {
             Write-Success "RAM: $($ram)GB"
         }
@@ -150,7 +150,7 @@ function Test-HardwareRequirements {
         
         if ($freeSpace -lt 3) {
             $script:issues += "Insufficient disk space: $($freeSpace)GB (3GB required)"
-            Write-Error "Free space: $($freeSpace)GB"
+            Write-ErrorMsg "Free space: $($freeSpace)GB"
             return $false
         }
         Write-Success "Free space: $($freeSpace)GB"
@@ -168,12 +168,12 @@ function Test-HardwareRequirements {
                 Write-VerboseInfo "NPU Device: $($npuDevice.Name)"
                 Write-VerboseInfo "Device ID: $($npuDevice.DeviceID)"
             } else {
-                Write-Warning "Hexagon NPU not explicitly detected (may still be available)"
+                Write-WarningMsg "Hexagon NPU not explicitly detected (may still be available)"
                 Write-VerboseInfo "Searched $($pnpDevices.Count) PnP devices"
             }
         } catch {
             Clear-Spinner
-            Write-Warning "Could not verify NPU status"
+            Write-WarningMsg "Could not verify NPU status"
             Write-VerboseInfo "Error checking NPU: $_"
         }
         
@@ -181,14 +181,14 @@ function Test-HardwareRequirements {
     } catch {
         Clear-Spinner
         $script:issues += "Hardware check failed: $_"
-        Write-Error "Hardware check failed: $_"
+        Write-ErrorMsg "Hardware check failed: $_"
         return $false
     }
 }
 
 # Check and install Python
 function Install-Python {
-    Write-Progress "Checking Python installation"
+    Write-StepProgress "Checking Python installation"
     
     $pythonVersions = @("3.10", "3.9")
     $pythonFound = $false
@@ -270,12 +270,12 @@ function Install-Python {
         } catch {
             Clear-Spinner
             $script:issues += "Failed to install Python: $_"
-            Write-Error "Python installation failed"
+            Write-ErrorMsg "Python installation failed"
             Write-VerboseInfo "Installation error details: $_"
         }
     } elseif (!$pythonFound) {
         $script:issues += "Python 3.9 or 3.10 not found"
-        Write-Error "Python 3.9/3.10 required"
+        Write-ErrorMsg "Python 3.9/3.10 required"
     }
     
     return $pythonFound
@@ -283,7 +283,7 @@ function Install-Python {
 
 # Install Poetry
 function Install-Poetry {
-    Write-Progress "Checking Poetry installation"
+    Write-StepProgress "Checking Poetry installation"
     
     try {
         $poetryVersion = & poetry --version 2>&1
@@ -295,7 +295,7 @@ function Install-Poetry {
     
     if ($CheckOnly) {
         $script:issues += "Poetry not installed"
-        Write-Error "Poetry not found"
+        Write-ErrorMsg "Poetry not found"
         return $false
     }
     
@@ -307,14 +307,14 @@ function Install-Poetry {
         return $true
     } catch {
         $script:issues += "Failed to install Poetry: $_"
-        Write-Error "Poetry installation failed"
+        Write-ErrorMsg "Poetry installation failed"
         return $false
     }
 }
 
 # Clone or update repository
 function Update-Repository {
-    Write-Progress "Updating repository"
+    Write-StepProgress "Updating repository"
     
     $repoPath = "C:\AIDemo\repo"
     
@@ -325,13 +325,13 @@ function Update-Repository {
             & git pull origin main
             Write-Success "Repository updated"
         } catch {
-            Write-Warning "Could not update repository: $_"
+            Write-WarningMsg "Could not update repository: $_"
         }
         Pop-Location
     } else {
         if ($CheckOnly) {
             $script:warnings += "Repository not cloned"
-            Write-Warning "Repository not found at $repoPath"
+            Write-WarningMsg "Repository not found at $repoPath"
             return $true
         }
         
@@ -340,7 +340,7 @@ function Update-Repository {
             & git clone https://github.com/your-repo/AI-image-gen-battle.git $repoPath
             Write-Success "Repository cloned"
         } catch {
-            Write-Warning "Could not clone repository (will use local files)"
+            Write-WarningMsg "Could not clone repository (will use local files)"
         }
     }
     
@@ -357,7 +357,7 @@ function Update-Repository {
         Write-Success "Client files deployed"
     } else {
         $script:warnings += "Client source files not found"
-        Write-Warning "Client files not found"
+        Write-WarningMsg "Client files not found"
     }
     
     return $true
@@ -365,7 +365,7 @@ function Update-Repository {
 
 # Install Python dependencies
 function Install-Dependencies {
-    Write-Progress "Installing Python dependencies"
+    Write-StepProgress "Installing Python dependencies"
     
     Push-Location "C:\AIDemo\client"
     
@@ -419,7 +419,7 @@ function Install-Dependencies {
         
         if ($LASTEXITCODE -ne 0) {
             $script:warnings += "Failed to install $dep"
-            Write-Warning "Installation failed for $dep"
+            Write-WarningMsg "Installation failed for $dep"
             if ($script:Verbose) {
                 Write-VerboseInfo "Error output:"
                 $output | ForEach-Object { Write-VerboseInfo "  $_" }
@@ -441,7 +441,7 @@ function Install-Dependencies {
     if ($LASTEXITCODE -eq 0) {
         Write-VerboseInfo "PyTorch installed successfully"
     } else {
-        Write-Warning "PyTorch installation may have issues"
+        Write-WarningMsg "PyTorch installation may have issues"
         if ($script:Verbose) {
             $output | ForEach-Object { Write-VerboseInfo "  $_" }
         }
@@ -468,7 +468,7 @@ function Install-Dependencies {
         
         if ($LASTEXITCODE -ne 0) {
             $script:warnings += "Failed to install $dep"
-            Write-Warning "Installation failed for $dep"
+            Write-WarningMsg "Installation failed for $dep"
             if ($script:Verbose) {
                 Write-VerboseInfo "Error output:"
                 $output | ForEach-Object { Write-VerboseInfo "  $_" }
@@ -487,7 +487,7 @@ function Install-Dependencies {
 
 # Install Snapdragon NPU support
 function Install-NPUSupport {
-    Write-Progress "Installing Snapdragon NPU support"
+    Write-StepProgress "Installing Snapdragon NPU support"
     
     & C:\AIDemo\venv\Scripts\Activate.ps1
     
@@ -498,7 +498,7 @@ function Install-NPUSupport {
         & pip install onnxruntime-qnn
         Write-Success "ONNX Runtime QNN installed"
     } catch {
-        Write-Warning "QNN-specific runtime not available, trying standard ONNX Runtime"
+        Write-WarningMsg "QNN-specific runtime not available, trying standard ONNX Runtime"
         & pip install "onnxruntime>=1.16.0,<1.17.0"
     }
     
@@ -512,7 +512,7 @@ function Install-NPUSupport {
         & pip install qai-hub
         Write-Success "Qualcomm AI Hub tools installed"
     } catch {
-        Write-Warning "Qualcomm AI Hub tools not available"
+        Write-WarningMsg "Qualcomm AI Hub tools not available"
     }
     
     # Verify NPU providers
@@ -536,7 +536,7 @@ else:
 
 # Download optimized models
 function Download-Models {
-    Write-Progress "Downloading optimized models"
+    Write-StepProgress "Downloading optimized models"
     
     $modelsPath = "C:\AIDemo\models"
     Write-VerboseInfo "Models directory: $modelsPath"
@@ -583,7 +583,7 @@ function Download-Models {
             if ($fileSize -gt ($model.SizeBytes * 0.9)) {  # Allow 10% variance
                 Write-Success "$($model.Name) already downloaded"
             } else {
-                Write-Warning "Incomplete download detected, re-downloading..."
+                Write-WarningMsg "Incomplete download detected, re-downloading..."
                 Remove-Item $outputFile -Force
             }
         }
@@ -632,12 +632,12 @@ function Download-Models {
                 
             } catch {
                 $script:warnings += "Failed to download $($model.Name)"
-                Write-Warning "Could not download $($model.Name)"
+                Write-WarningMsg "Could not download $($model.Name)"
                 Write-VerboseInfo "Download error: $_"
             }
         } elseif ($CheckOnly -and !(Test-Path $outputFile)) {
             $script:warnings += "$($model.Name) not downloaded"
-            Write-Warning "$($model.Name) missing"
+            Write-WarningMsg "$($model.Name) missing"
         }
     }
     
@@ -666,7 +666,7 @@ function Download-Models {
             Write-VerboseInfo "Tokenizer file saved to: $tokenizerFile"
         } catch {
             Clear-Spinner
-            Write-Warning "Could not download tokenizer"
+            Write-WarningMsg "Could not download tokenizer"
             Write-VerboseInfo "Tokenizer download error: $_"
         }
     } elseif (Test-Path $tokenizerFile) {
@@ -686,7 +686,7 @@ function Download-Models {
 
 # Configure network and firewall
 function Configure-Network {
-    Write-Progress "Configuring network settings"
+    Write-StepProgress "Configuring network settings"
     
     if ($CheckOnly) {
         # Check if port is open
@@ -695,7 +695,7 @@ function Configure-Network {
             Write-Success "Firewall rule exists"
         } else {
             $script:warnings += "Firewall rule for port 5000 not configured"
-            Write-Warning "Firewall not configured"
+            Write-WarningMsg "Firewall not configured"
         }
     } else {
         # Add firewall rule for port 5000
@@ -709,7 +709,7 @@ function Configure-Network {
                 -ErrorAction SilentlyContinue
             Write-Success "Firewall rule added"
         } catch {
-            Write-Warning "Could not add firewall rule"
+            Write-WarningMsg "Could not add firewall rule"
         }
     }
     
@@ -722,7 +722,7 @@ function Configure-Network {
 
 # Create startup scripts
 function Create-StartupScripts {
-    Write-Progress "Creating startup scripts"
+    Write-StepProgress "Creating startup scripts"
     
     # Create start script
     $startScript = @"
@@ -767,7 +767,7 @@ Stop-Transcript
 
 # Run performance test
 function Test-Performance {
-    Write-Progress "Running performance test"
+    Write-StepProgress "Running performance test"
     
     if ($CheckOnly) {
         Write-Info "Skipping performance test in check-only mode"
@@ -885,7 +885,7 @@ except Exception as e:
 
 # Generate summary report
 function Generate-Report {
-    Write-Progress "Generating readiness report"
+    Write-StepProgress "Generating readiness report"
     
     $report = @"
 
@@ -976,7 +976,7 @@ function Main {
 "@ -ForegroundColor Cyan
     
     if ($CheckOnly) {
-        Write-Warning "Running in CHECK-ONLY mode - no changes will be made"
+        Write-WarningMsg "Running in CHECK-ONLY mode - no changes will be made"
     }
     
     if ($Verbose) {
@@ -1003,7 +1003,7 @@ function Main {
     $hardwareOK = Test-HardwareRequirements
     
     if (!$hardwareOK -and !$Force) {
-        Write-Error "Hardware requirements not met. Use -Force to continue anyway."
+        Write-ErrorMsg "Hardware requirements not met. Use -Force to continue anyway."
         exit 1
     }
     
@@ -1068,6 +1068,6 @@ function Main {
 try {
     Main
 } catch {
-    Write-Error "Fatal error: $_"
+    Write-ErrorMsg "Fatal error: $_"
     exit 1
 }
