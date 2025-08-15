@@ -135,8 +135,10 @@ echo.
 echo Starting server... (this may take 10-15 seconds)
 echo [%date% %time%] Forcing platform to Snapdragon X Elite >> "%LOG_FILE%"
 
-REM Launch demo_client.py in background with enhanced logging
-start "Snapdragon AI Demo Server" /min python demo_client.py
+REM Launch emergency web server (no Tkinter UI conflicts)
+echo       - Starting dedicated emergency web server...
+echo       - Emergency mode bypasses Tkinter desktop UI
+start "Snapdragon Emergency Server" /min python emergency_web_server.py
 
 REM Wait for server to be ready
 echo.

@@ -99,6 +99,29 @@ class DemoDisplay:
         
     def setup_ui(self):
         """Setup the main UI window."""
+        # Check if running in web-only mode (emergency demo)
+        web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+        
+        if web_only_mode:
+            print("[DEBUG] Web-only mode: Skipping Tkinter UI setup")
+            # Create dummy UI elements for web-only mode
+            self.root = None
+            self.main_frame = None
+            self.env_status_label = None
+            self.system_info_label = None
+            self.status_label = None
+            self.time_value = None
+            self.ai_value = None
+            self.memory_value = None
+            self.power_value = None
+            self.progress_var = None
+            self.progress_bar = None
+            self.progress_text = None
+            self.prompt_label = None
+            self.image_status = None
+            self.image_canvas = None
+            return
+        
         self.root = tk.Tk()
         self.root.title(f"AI Demo - {self.platform_info.get('processor_model', 'Unknown')}")
         
@@ -502,8 +525,10 @@ class DemoDisplay:
                     load_factor = (self.cpu_usage / 100) * 13
                     self.power_consumption = base_power + load_factor
                 
-                # Update UI
-                self.root.after_idle(self.update_metrics_display)
+                # Update UI (skip in web-only mode)
+                web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+                if not web_only_mode and self.root:
+                    self.root.after_idle(self.update_metrics_display)
                 
                 # Emit telemetry and status via WebSocket
                 if hasattr(self, 'server') and self.server:
@@ -533,6 +558,11 @@ class DemoDisplay:
     def update_metrics_display(self):
         """Update the metrics display."""
         try:
+            # Skip UI updates in web-only mode
+            web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+            if web_only_mode or not self.root:
+                return
+                
             # Update AI acceleration metric
             if self.is_snapdragon and self.npu_usage is not None:
                 self.ai_value.config(text=f"{int(self.npu_usage)}")
@@ -606,10 +636,12 @@ class DemoDisplay:
             'total_steps': steps
         }
         
-        # Update UI
-        self.status_label.config(text="🟠 PROCESSING...", fg='#ffa500')
-        self.prompt_label.config(text=prompt)
-        self.image_status.config(text=f"Generating: {prompt}\nProcessing with {'NPU' if self.is_snapdragon else 'CPU + iGPU'}")
+        # Update UI (skip in web-only mode)
+        web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+        if not web_only_mode and self.root:
+            self.status_label.config(text="🟠 PROCESSING...", fg='#ffa500')
+            self.prompt_label.config(text=prompt)
+            self.image_status.config(text=f"Generating: {prompt}\nProcessing with {'NPU' if self.is_snapdragon else 'CPU + iGPU'}")
         
         # Emit job started event
         if hasattr(self, 'server') and self.server:
@@ -640,7 +672,9 @@ class DemoDisplay:
         try:
             # Initialize AI pipeline if not already done
             if not hasattr(self, 'ai_generator') or self.ai_generator is None:
-                self.root.after_idle(lambda: self.status_label.config(text="Loading AI model...", fg='yellow'))
+                web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+                if not web_only_mode and self.root:
+                    self.root.after_idle(lambda: self.status_label.config(text="Loading AI model...", fg='yellow'))
                 self.ai_generator = AIImageGenerator(self.platform_info)
             
             # Progress callback for real-time updates
@@ -649,7 +683,9 @@ class DemoDisplay:
                     return
                 self.current_step = current_step
                 progress_percent = progress * 100
-                self.root.after_idle(self.update_progress, current_step, progress_percent)
+                web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+                if not web_only_mode and self.root:
+                    self.root.after_idle(self.update_progress, current_step, progress_percent)
                 
                 # Update job record
                 if self.current_job_id and self.current_job_id in self.jobs:
@@ -685,7 +721,9 @@ class DemoDisplay:
             self.total_steps = steps
             
             # Generate the image
-            self.root.after_idle(lambda: self.status_label.config(text="Generating...", fg='yellow'))
+            web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+            if not web_only_mode and self.root:
+                self.root.after_idle(lambda: self.status_label.config(text="Generating...", fg='yellow'))
             
             if self.ai_generator:
                 image, metrics = self.ai_generator.generate_image(
@@ -716,17 +754,30 @@ class DemoDisplay:
             # Generation complete
             if self.demo_active:
                 self.end_time = time.time()
-                self.root.after_idle(self.generation_complete)
+                web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+                if not web_only_mode and self.root:
+                    self.root.after_idle(self.generation_complete)
+                else:
+                    self.generation_complete()
                 
         except Exception as e:
             logging.error(f"Error in generation: {e}")
             if self.current_job_id and self.current_job_id in self.jobs:
                 self.jobs[self.current_job_id]['status'] = 'error'
                 self.jobs[self.current_job_id]['error'] = str(e)
-            self.root.after_idle(self.generation_error, str(e))
+            web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+            if not web_only_mode and self.root:
+                self.root.after_idle(self.generation_error, str(e))
+            else:
+                self.generation_error(str(e))
             
     def update_progress(self, step: int, progress: float):
         """Update progress display."""
+        # Skip UI updates in web-only mode
+        web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+        if web_only_mode or not self.root:
+            return
+            
         self.progress_var.set(progress)
         self.progress_text.config(text=f"Steps: {step}/{self.total_steps} | {int(progress)}% Complete")
         
@@ -1396,6 +1447,9 @@ def main():
     
     print("🚀 Starting AI Image Generation Demo Client...")
     
+    # Check if running in web-only mode (emergency demo)
+    web_only_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+    
     # Detect platform
     detector = PlatformDetector()
     platform_info = detector.detect_hardware()
@@ -1403,29 +1457,47 @@ def main():
     detector.apply_optimizations()
     
     print(f"Platform detected: {platform_info['platform_type'].upper()}")
+    print(f"Web-only mode: {web_only_mode}")
     
-    # Create demo display
-    display = DemoDisplay(platform_info)
-    
-    # Start network server in separate thread
-    server = NetworkServer(display)
-    
-    # Link display to server for WebSocket emits
-    display.server = server
-    
-    server_thread = threading.Thread(
-        target=server.run,
-        kwargs={'host': '0.0.0.0', 'port': 5000},
-        daemon=True
-    )
-    server_thread.start()
-    
-    print("✅ Demo client ready!")
-    print("Network server running on port 5000")
-    print("Press F11 for fullscreen, ESC to exit fullscreen")
-    
-    # Run the display
-    display.run()
+    if web_only_mode:
+        # Emergency mode: Run Flask server only (no Tkinter UI)
+        print("🚨 EMERGENCY MODE: Running web server only")
+        
+        # Create minimal display for web server
+        display = DemoDisplay(platform_info)
+        
+        # Start network server directly (not as daemon)
+        server = NetworkServer(display)
+        display.server = server
+        
+        print("✅ Emergency demo server ready!")
+        print("Network server running on port 5000")
+        print("Server will run indefinitely - press Ctrl+C to stop")
+        
+        # Run server directly (blocking call)
+        server.run(host='0.0.0.0', port=5000)
+        
+    else:
+        # Normal mode: Run both Tkinter UI and Flask server
+        display = DemoDisplay(platform_info)
+        
+        # Start network server in separate thread
+        server = NetworkServer(display)
+        display.server = server
+        
+        server_thread = threading.Thread(
+            target=server.run,
+            kwargs={'host': '0.0.0.0', 'port': 5000},
+            daemon=True
+        )
+        server_thread.start()
+        
+        print("✅ Demo client ready!")
+        print("Network server running on port 5000")
+        print("Press F11 for fullscreen, ESC to exit fullscreen")
+        
+        # Run the display (Tkinter mainloop)
+        display.run()
 
 if __name__ == "__main__":
     main()
