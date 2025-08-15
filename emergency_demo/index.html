@@ -209,25 +209,24 @@
         }
 
         .generate-btn {
-            padding: 25px 40px;
-            font-size: 24px;
+            padding: 15px 30px;
+            font-size: 18px;
             font-weight: bold;
             background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
             color: #1a1a2e;
             border: none;
-            border-radius: 15px;
+            border-radius: 10px;
             cursor: pointer;
             transition: all 0.3s ease;
-            width: 100%;
-            margin-bottom: 15px;
-            box-shadow: 0 6px 20px rgba(0, 255, 136, 0.3);
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
             text-transform: uppercase;
             letter-spacing: 1px;
+            margin-left: 20px;
         }
 
         .generate-btn:hover {
             transform: scale(1.05);
-            box-shadow: 0 12px 35px rgba(0, 255, 136, 0.6);
+            box-shadow: 0 8px 25px rgba(0, 255, 136, 0.6);
             background: linear-gradient(135deg, #00ff88 0%, #00e676 100%);
         }
 
@@ -393,7 +392,12 @@
         
         <div class="header" id="header">
             <div class="logo" id="platformLogo">Platform Name</div>
-            <div class="status ready" id="status">🔄 READY</div>
+            <div style="display: flex; align-items: center;">
+                <div class="status ready" id="status">🔄 READY</div>
+                <button class="generate-btn" id="generateBtn" onclick="startGeneration()">
+                    Generate Image
+                </button>
+            </div>
         </div>
         
         <div class="main-content">
@@ -447,12 +451,9 @@
                     💭 Prompt: "A futuristic retail store with advanced technology displays and holographic interfaces"
                 </div>
                 
-                <div class="generate-section">
-                    <button class="generate-btn" id="generateBtn" onclick="startGeneration()">
-                        Generate Image
-                    </button>
+                <div class="generate-section" style="display: none;">
                     <div class="generate-info" id="generateInfo">
-                        Click to start AI image generation
+                        Use the Generate Image button in the header to start AI image generation
                     </div>
                 </div>
             </div>
