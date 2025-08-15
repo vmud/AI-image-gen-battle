@@ -17,17 +17,23 @@ import logging
 from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 import socket
-from flask import Flask, request, jsonify
-from flask_socketio import SocketIO
+from flask import Flask, request, jsonify, send_from_directory, render_template_string, send_file
+from flask_socketio import SocketIO, emit
+from flask_cors import CORS
 import base64
 from io import BytesIO
 from PIL import Image, ImageTk
 import psutil
 import queue
+import uuid
+import hashlib
+from pathlib import Path
+import requests
 
 # Import our platform detection and AI pipeline modules
 from platform_detection import PlatformDetector
 from ai_pipeline import AIImageGenerator
+from error_mitigation import ErrorMitigationSystem, JobRecoveryManager, with_error_recovery
 
 class DemoDisplay:
     def __init__(self, platform_info: Dict[str, Any]):
@@ -45,9 +51,24 @@ class DemoDisplay:
         self.generation_metrics = None
         self.ai_generator = None  # Will be initialized on first use
         
+        # Job management
+        self.current_job_id = None
+        self.jobs = {}  # Store job history
+        self.generated_images_dir = Path("static/generated")
+        self.generated_images_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Error mitigation system
+        self.error_mitigation = ErrorMitigationSystem(self)
+        self.job_recovery = JobRecoveryManager(self.jobs)
+        
         # Environment validation
         self.validation_results = None
         self.environment_validator = None
+        
+        # Control hub configuration
+        self.control_hub_url = os.environ.get('CONTROL_HUB_URL', 'http://localhost:8000')
+        self.control_hub_reachable = False
+        self.last_control_check = 0
         
         # Performance metrics
         self.cpu_usage = 0
@@ -58,9 +79,15 @@ class DemoDisplay:
         # Setup logging
         self.logger = logging.getLogger(__name__)
         
+        # Reference to network server for Socket.IO emits (will be set after server initialization)
+        self.server = None  # type: Optional[Any]
+        
         # UI setup
         self.setup_ui()
         self.setup_monitoring()
+        
+        # Start control hub monitoring
+        self.start_control_hub_monitor()
         
     def setup_ui(self):
         """Setup the main UI window."""
@@ -422,6 +449,27 @@ class DemoDisplay:
         self.monitor_thread = threading.Thread(target=self.monitor_performance, daemon=True)
         self.monitor_thread.start()
         
+    def start_control_hub_monitor(self):
+        """Start monitoring control hub reachability."""
+        def monitor_control():
+            while True:
+                try:
+                    # Check control hub every 5 seconds
+                    if time.time() - self.last_control_check > 5:
+                        try:
+                            response = requests.head(f"{self.control_hub_url}/health", timeout=2)
+                            self.control_hub_reachable = response.status_code == 200
+                        except:
+                            self.control_hub_reachable = False
+                        self.last_control_check = time.time()
+                    time.sleep(5)
+                except Exception as e:
+                    self.logger.error(f"Error monitoring control hub: {e}")
+                    time.sleep(10)
+        
+        control_thread = threading.Thread(target=monitor_control, daemon=True)
+        control_thread.start()
+        
     def monitor_performance(self):
         """Monitor system performance metrics."""
         while True:
@@ -448,6 +496,25 @@ class DemoDisplay:
                 
                 # Update UI
                 self.root.after_idle(self.update_metrics_display)
+                
+                # Emit telemetry and status via WebSocket
+                if hasattr(self, 'server') and self.server:
+                    try:
+                        # Emit telemetry update
+                        self.server.socketio.emit('telemetry', {
+                            'telemetry': {
+                                'cpu': self.cpu_usage,
+                                'memory_gb': self.memory_usage,
+                                'power_w': self.power_consumption,
+                                'npu': self.npu_usage
+                            }
+                        }, broadcast=True)
+                        
+                        # Emit status snapshot
+                        status_payload = self.get_status(self.current_job_id if self.current_job_id else None)
+                        self.server.socketio.emit('status', status_payload, broadcast=True)
+                    except Exception as emit_error:
+                        self.logger.debug(f"Socket emit error: {emit_error}")
                 
                 time.sleep(1)
                 
@@ -478,21 +545,75 @@ class DemoDisplay:
         except Exception as e:
             logging.error(f"Error updating metrics: {e}")
             
-    def start_generation(self, prompt: str, steps: int = 20, sync_time: float = None):
-        """Start image generation."""
+    @with_error_recovery()
+    def start_generation(self, prompt: str, steps: int = 20, sync_time: Optional[float] = None, 
+                        mode: str = 'local', job_id: Optional[str] = None) -> Optional[str]:
+        """Start image generation with job management and error recovery."""
+        # Check for concurrent generation
         if self.demo_active:
-            return False
+            self.logger.warning("Generation already in progress")
+            return None
+        
+        # Pre-flight health checks
+        health = self.error_mitigation.check_system_health()
+        if health['issues']:
+            self.logger.error(f"Critical issues detected: {health['issues']}")
+            # Try to recover from critical issues
+            for issue in health['issues']:
+                strategy = self.error_mitigation.recovery_strategies.get(issue)
+                if strategy:
+                    recovery = strategy['recovery']()
+                    if not recovery['success']:
+                        self.logger.error(f"Could not recover from {issue}: {recovery['message']}")
+                        return None
+        
+        # Clean up old jobs if needed
+        self.job_recovery.cleanup_old_jobs()
             
+        # Generate job ID if not provided
+        if job_id is None:
+            job_id = str(uuid.uuid4())
+        
+        self.current_job_id = job_id
         self.demo_active = True
         self.current_prompt = prompt
         self.total_steps = steps
         self.current_step = 0
         self.generated_image = None
+        self.start_time = time.time()
+        self.end_time = None
+        
+        # Initialize job record
+        self.jobs[job_id] = {
+            'id': job_id,
+            'prompt': prompt,
+            'steps': steps,
+            'mode': mode,
+            'status': 'active',
+            'start_time': self.start_time,
+            'end_time': None,
+            'image_url': None,
+            'metrics': {},
+            'current_step': 0,
+            'total_steps': steps
+        }
         
         # Update UI
         self.status_label.config(text="🟠 PROCESSING...", fg='#ffa500')
         self.prompt_label.config(text=prompt)
         self.image_status.config(text=f"Generating: {prompt}\nProcessing with {'NPU' if self.is_snapdragon else 'CPU + iGPU'}")
+        
+        # Emit job started event
+        if hasattr(self, 'server') and self.server:
+            try:
+                self.server.socketio.emit('job_started', {
+                    'job_id': job_id,
+                    'prompt': prompt,
+                    'steps': steps,
+                    'mode': mode
+                }, broadcast=True)
+            except Exception as emit_error:
+                self.logger.debug(f"Socket emit error: {emit_error}")
         
         # Wait for sync time if specified
         if sync_time is not None:
@@ -500,19 +621,17 @@ class DemoDisplay:
             if wait_time > 0:
                 time.sleep(wait_time)
         
-        self.start_time = time.time()
-        
         # Start generation in separate thread
         gen_thread = threading.Thread(target=self.run_generation, daemon=True)
         gen_thread.start()
         
-        return True
+        return job_id
         
     def run_generation(self):
         """Run the actual image generation using AI pipeline."""
         try:
             # Initialize AI pipeline if not already done
-            if not hasattr(self, 'ai_generator'):
+            if not hasattr(self, 'ai_generator') or self.ai_generator is None:
                 self.root.after_idle(lambda: self.status_label.config(text="Loading AI model...", fg='yellow'))
                 self.ai_generator = AIImageGenerator(self.platform_info)
             
@@ -523,6 +642,24 @@ class DemoDisplay:
                 self.current_step = current_step
                 progress_percent = progress * 100
                 self.root.after_idle(self.update_progress, current_step, progress_percent)
+                
+                # Update job record
+                if self.current_job_id and self.current_job_id in self.jobs:
+                    self.jobs[self.current_job_id]['current_step'] = current_step
+                
+                # Emit progress via WebSocket
+                if hasattr(self, 'server') and self.server and self.current_job_id:
+                    try:
+                        elapsed_time = time.time() - self.start_time if self.start_time else 0
+                        self.server.socketio.emit('progress', {
+                            'job_id': self.current_job_id,
+                            'current_step': current_step,
+                            'total_steps': total_steps,
+                            'progress': progress_percent,
+                            'elapsed_time': elapsed_time
+                        }, broadcast=True)
+                    except Exception as emit_error:
+                        self.logger.debug(f"Socket emit error: {emit_error}")
             
             # Quality-focused settings based on platform
             if self.is_snapdragon:
@@ -558,6 +695,16 @@ class DemoDisplay:
             self.generated_image = image
             self.generation_metrics = metrics
             
+            # Save image to disk
+            if image and self.current_job_id:
+                image_filename = f"{self.current_job_id}.png"
+                image_path = self.generated_images_dir / image_filename
+                image.save(image_path, "PNG")
+                
+                # Update job record with image URL
+                self.jobs[self.current_job_id]['image_url'] = f"/static/generated/{image_filename}"
+                self.jobs[self.current_job_id]['metrics'] = metrics
+            
             # Generation complete
             if self.demo_active:
                 self.end_time = time.time()
@@ -565,6 +712,9 @@ class DemoDisplay:
                 
         except Exception as e:
             logging.error(f"Error in generation: {e}")
+            if self.current_job_id and self.current_job_id in self.jobs:
+                self.jobs[self.current_job_id]['status'] = 'error'
+                self.jobs[self.current_job_id]['error'] = str(e)
             self.root.after_idle(self.generation_error, str(e))
             
     def update_progress(self, step: int, progress: float):
@@ -585,12 +735,34 @@ class DemoDisplay:
         else:
             elapsed_time = 0.0
         
+        # Update job record
+        if self.current_job_id and self.current_job_id in self.jobs:
+            self.jobs[self.current_job_id]['status'] = 'completed'
+            self.jobs[self.current_job_id]['end_time'] = self.end_time
+            self.jobs[self.current_job_id]['elapsed_time'] = elapsed_time
+        
         # Update status
         self.status_label.config(text="✅ COMPLETE!", fg='#00ff88')
         self.time_value.config(text=f"{elapsed_time:.1f}")
         
         # Update performance comparison
         self.update_performance_comparison(elapsed_time)
+        
+        # Mark demo as inactive
+        self.demo_active = False
+        
+        # Emit completed event via WebSocket
+        if hasattr(self, 'server') and self.server and self.current_job_id:
+            try:
+                self.server.socketio.emit('completed', {
+                    'job_id': self.current_job_id,
+                    'prompt': self.current_prompt,
+                    'elapsed_time': elapsed_time,
+                    'image_url': self.jobs[self.current_job_id].get('image_url') if self.current_job_id in self.jobs else None,
+                    'total_steps': self.total_steps
+                }, broadcast=True)
+            except Exception as emit_error:
+                self.logger.debug(f"Socket emit error: {emit_error}")
         
         # Display the generated image
         if hasattr(self, 'generated_image') and self.generated_image:
@@ -641,35 +813,93 @@ class DemoDisplay:
         self.status_label.config(text="❌ ERROR", fg='red')
         self.image_status.config(text=f"Generation failed: {error}")
         
+        # Update job record
+        if self.current_job_id and self.current_job_id in self.jobs:
+            self.jobs[self.current_job_id]['status'] = 'error'
+            self.jobs[self.current_job_id]['error'] = error
+        
+        # Emit error event via WebSocket
+        if hasattr(self, 'server') and self.server and self.current_job_id:
+            try:
+                self.server.socketio.emit('error', {
+                    'job_id': self.current_job_id,
+                    'error': error
+                }, broadcast=True)
+            except Exception as emit_error:
+                self.logger.debug(f"Socket emit error: {emit_error}")
+        
     def stop_generation(self):
         """Stop current generation."""
         self.demo_active = False
         self.status_label.config(text="🛑 STOPPED", fg='#888')
         self.image_status.config(text="Generation stopped")
         
-    def get_status(self) -> Dict[str, Any]:
-        """Get current demo status."""
+        # Update job record
+        if self.current_job_id and self.current_job_id in self.jobs:
+            self.jobs[self.current_job_id]['status'] = 'stopped'
+            self.jobs[self.current_job_id]['end_time'] = time.time()
+        
+    def get_status(self, job_id: Optional[str] = None) -> Dict[str, Any]:
+        """Get current demo status or specific job status."""
+        # If job_id provided, return job-specific status
+        if job_id and job_id in self.jobs:
+            job = self.jobs[job_id]
+            elapsed = 0
+            if job['start_time']:
+                if job['end_time']:
+                    elapsed = job['end_time'] - job['start_time']
+                else:
+                    elapsed = time.time() - job['start_time']
+            
+            return {
+                'job_id': job_id,
+                'status': job['status'],
+                'prompt': job['prompt'],
+                'current_step': job['current_step'],
+                'total_steps': job['total_steps'],
+                'elapsed_time': elapsed,
+                'image_url': job.get('image_url'),
+                'metrics': job.get('metrics', {}),
+                'error': job.get('error')
+            }
+        
+        # Otherwise return global status
         elapsed_time = 0
         if self.start_time:
             if self.end_time:
                 elapsed_time = self.end_time - self.start_time
             else:
                 elapsed_time = time.time() - self.start_time
-                
+        
+        # Get current job image URL if available
+        image_url = None
+        if self.current_job_id and self.current_job_id in self.jobs:
+            image_url = self.jobs[self.current_job_id].get('image_url')
+        
+        # Get health status
+        health_summary = self.error_mitigation.get_health_summary()
+            
         return {
             'status': 'active' if self.demo_active else 'idle',
             'ready': self.validation_results.get("overall_ready", False) if self.validation_results else False,
             'model_loaded': self.ai_generator is not None,
+            'llm_ready': self.ai_generator is not None,
+            'control_reachable': self.control_hub_reachable,
             'current_step': self.current_step,
             'total_steps': self.total_steps,
             'elapsed_time': elapsed_time,
             'completed': not self.demo_active and self.end_time is not None,
             'prompt': self.current_prompt,
             'platform': self.platform_info['platform_type'],
-            'cpu_usage': self.cpu_usage,
-            'memory_usage': self.memory_usage,
-            'power_consumption': self.power_consumption,
-            'npu_usage': self.npu_usage
+            'telemetry': {
+                'cpu': self.cpu_usage,
+                'memory_gb': self.memory_usage,
+                'power_w': self.power_consumption,
+                'npu': self.npu_usage
+            },
+            'image_url': image_url,
+            'current_job_id': self.current_job_id,
+            'health': health_summary
         }
         
     def validate_environment(self):
@@ -900,12 +1130,112 @@ class DemoDisplay:
 class NetworkServer:
     def __init__(self, display: DemoDisplay):
         self.display = display
-        self.app = Flask(__name__)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*")
+        self.app = Flask(__name__, static_folder='static')
+        CORS(self.app)  # Enable CORS for all routes
+        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode='eventlet')
+        self.logger = logging.getLogger(__name__)  # Initialize logger
         self.setup_routes()
+        self.setup_socket_handlers()
         
     def setup_routes(self):
-        """Setup Flask routes for remote control."""
+        """Setup Flask routes for remote control and static file serving."""
+        
+        # Serve static files
+        @self.app.route('/')
+        def index():
+            """Serve landing page to choose between Intel and Snapdragon demos."""
+            html = '''
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>Get Snapped - AI Demo Selection</title>
+                <style>
+                    body {
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+                        color: white;
+                        height: 100vh;
+                        margin: 0;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        flex-direction: column;
+                    }
+                    h1 {
+                        font-size: 48px;
+                        margin-bottom: 20px;
+                        text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+                    }
+                    .tagline {
+                        font-size: 24px;
+                        font-style: italic;
+                        margin-bottom: 40px;
+                        opacity: 0.9;
+                    }
+                    .buttons {
+                        display: flex;
+                        gap: 40px;
+                    }
+                    .demo-btn {
+                        padding: 20px 40px;
+                        font-size: 20px;
+                        font-weight: bold;
+                        border: none;
+                        border-radius: 12px;
+                        cursor: pointer;
+                        text-decoration: none;
+                        color: white;
+                        transition: all 0.3s ease;
+                        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+                    }
+                    .demo-btn:hover {
+                        transform: translateY(-4px);
+                        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.4);
+                    }
+                    .snapdragon {
+                        background: linear-gradient(90deg, #c41e3a, #ff6b6b);
+                    }
+                    .intel {
+                        background: linear-gradient(90deg, #0071c5, #4a90e2);
+                    }
+                    .info {
+                        margin-top: 40px;
+                        font-size: 14px;
+                        opacity: 0.7;
+                    }
+                </style>
+            </head>
+            <body>
+                <h1>🚀 AI Image Generation Battle</h1>
+                <p class="tagline">Get Snapped</p>
+                <div class="buttons">
+                    <a href="/snapdragon" class="demo-btn snapdragon">
+                        🔥 Snapdragon X Elite Demo
+                    </a>
+                    <a href="/intel" class="demo-btn intel">
+                        ⚡ Intel Core Ultra Demo
+                    </a>
+                </div>
+                <p class="info">Choose your platform to start the demo</p>
+            </body>
+            </html>
+            '''
+            return render_template_string(html)
+        
+        @self.app.route('/snapdragon')
+        def snapdragon_demo():
+            """Serve Snapdragon demo page."""
+            return send_from_directory('static', 'snapdragon-demo.html')
+        
+        @self.app.route('/intel')
+        def intel_demo():
+            """Serve Intel demo page."""
+            return send_from_directory('static', 'intel-demo.html')
+        
+        @self.app.route('/static/<path:path>')
+        def serve_static(path):
+            """Serve static files."""
+            return send_from_directory('static', path)
         
         @self.app.route('/info', methods=['GET'])
         def get_info():
@@ -919,7 +1249,9 @@ class NetworkServer:
             
         @self.app.route('/status', methods=['GET'])
         def get_status():
-            return jsonify(self.display.get_status())
+            """Get status - optionally with job_id query parameter."""
+            job_id = request.args.get('job_id')
+            return jsonify(self.display.get_status(job_id))
             
         @self.app.route('/command', methods=['POST'])
         def handle_command():
@@ -932,22 +1264,60 @@ class NetworkServer:
                     prompt = command_data.get('prompt', 'a beautiful landscape')
                     steps = command_data.get('steps', 20)
                     sync_time = command_data.get('sync_time')
+                    mode = command_data.get('mode', 'local')
                     
-                    success = self.display.start_generation(prompt, steps, sync_time)
-                    return jsonify({'success': success, 'message': 'Generation started' if success else 'Already running'})
+                    job_id = self.display.start_generation(prompt, steps, sync_time, mode)
+                    
+                    if job_id:
+                        return jsonify({'success': True, 'job_id': job_id, 'message': 'Generation started'})
+                    else:
+                        return jsonify({'success': False, 'message': 'Already running'}), 400
                     
                 elif command == 'stop_generation':
                     self.display.stop_generation()
                     return jsonify({'success': True, 'message': 'Generation stopped'})
                     
                 elif command == 'get_status':
-                    return jsonify(self.display.get_status())
+                    job_id = command_data.get('job_id')
+                    return jsonify(self.display.get_status(job_id))
                     
                 else:
                     return jsonify({'success': False, 'message': f'Unknown command: {command}'}), 400
                     
             except Exception as e:
                 return jsonify({'success': False, 'message': str(e)}), 500
+        
+        @self.app.route('/static/generated/<path:filename>')
+        def serve_generated_image(filename):
+            """Serve generated images."""
+            return send_from_directory(str(self.display.generated_images_dir), filename)
+        
+        @self.app.route('/health', methods=['GET'])
+        def health_check():
+            """Health check endpoint for monitoring."""
+            health = self.display.error_mitigation.get_health_summary()
+            status_code = 200 if health['healthy'] else 503
+            return jsonify(health), status_code
+    
+    def setup_socket_handlers(self):
+        """Setup Socket.IO event handlers."""
+        
+        @self.socketio.on('connect')
+        def handle_connect():
+            """Handle client connection."""
+            self.logger.info("Client connected via WebSocket")
+            # Send initial status snapshot
+            emit('status', self.display.get_status())
+            
+        @self.socketio.on('disconnect')
+        def handle_disconnect():
+            """Handle client disconnection."""
+            self.logger.info("Client disconnected from WebSocket")
+            
+        @self.socketio.on('request_status')
+        def handle_status_request():
+            """Handle status request from client."""
+            emit('status', self.display.get_status())
                 
     def run(self, host='0.0.0.0', port=5000):
         """Run the network server."""
@@ -980,6 +1350,10 @@ def main():
     
     # Start network server in separate thread
     server = NetworkServer(display)
+    
+    # Link display to server for WebSocket emits
+    display.server = server
+    
     server_thread = threading.Thread(
         target=server.run,
         kwargs={'host': '0.0.0.0', 'port': 5000},

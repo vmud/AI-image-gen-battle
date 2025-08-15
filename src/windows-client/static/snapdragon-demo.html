@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Snapped - Snapdragon X Elite AI Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background: linear-gradient(90deg, #c41e3a 0%, #ff6b6b 100%);
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(196, 30, 58, 0.3);
+        }
+        
+        .logo {
+            font-size: 28px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+        }
+        
+        .logo::before {
+            content: "🔥";
+            margin-right: 10px;
+            font-size: 32px;
+        }
+        
+        .tagline {
+            font-size: 16px;
+            font-weight: normal;
+            margin-left: 20px;
+            font-style: italic;
+            opacity: 0.9;
+        }
+        
+        .status {
+            font-size: 24px;
+            font-weight: bold;
+            color: #00ff88;
+            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .main-content {
+            flex: 1;
+            display: flex;
+            padding: 30px;
+            padding-bottom: 60px;
+            gap: 30px;
+            overflow: auto;
+        }
+        
+        .image-section {
+            flex: 2;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+            padding: 20px;
+            border: 2px solid rgba(196, 30, 58, 0.3);
+            position: relative;
+            overflow: hidden;
+            min-height: 500px;
+        }
+        
+        .image-container {
+            width: 100%;
+            height: 100%;
+            min-height: 450px;
+            background: linear-gradient(45deg, #2a2a3e 25%, transparent 25%), 
+                        linear-gradient(-45deg, #2a2a3e 25%, transparent 25%), 
+                        linear-gradient(45deg, transparent 75%, #2a2a3e 75%), 
+                        linear-gradient(-45deg, transparent 75%, #2a2a3e 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .generated-image {
+            width: 90%;
+            height: 90%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: white;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+        }
+        
+        .completion-badge {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #00ff88;
+            color: #1a1a2e;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            box-shadow: 0 4px 15px rgba(0, 255, 136, 0.4);
+            display: none;
+        }
+        
+        .metrics-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            min-width: 350px;
+            overflow-y: auto;
+        }
+        
+        .metric-card {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid #c41e3a;
+        }
+        
+        .metric-title {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .metric-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        
+        .metric-unit {
+            font-size: 16px;
+            color: #ccc;
+            margin-left: 5px;
+        }
+        
+        .progress-section {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid #00ff88;
+        }
+        
+        .progress-title {
+            font-size: 16px;
+            margin-bottom: 10px;
+            color: #00ff88;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+        
+        .progress-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+            border-radius: 10px;
+            transition: width 0.5s ease;
+        }
+        
+        .step-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 14px;
+        }
+        
+        .prompt-display {
+            background: rgba(196, 30, 58, 0.1);
+            border: 1px solid rgba(196, 30, 58, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            font-style: italic;
+            color: #ff6b6b;
+            word-wrap: break-word;
+        }
+        
+        .prompt-box {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 15px;
+            border-left: 4px solid #ffa500;
+        }
+        
+        .prompt-box h3 {
+            color: #ffa500;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        #promptInput {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        
+        #promptInput:focus {
+            outline: none;
+            border-color: #ffa500;
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        #generateBtn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(90deg, #c41e3a, #ff6b6b);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        #generateBtn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(196, 30, 58, 0.4);
+        }
+        
+        #generateBtn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .sample-prompts {
+            margin-top: 10px;
+        }
+        
+        .sample-prompts p {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 5px;
+        }
+        
+        .sample-prompt {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .sample-prompt:hover {
+            background: rgba(255, 165, 0, 0.2);
+            border-color: #ffa500;
+        }
+        
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(26, 26, 46, 0.95);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .status-indicator {
+            font-size: 12px;
+            font-weight: bold;
+            padding: 5px 15px;
+            border-radius: 15px;
+            transition: all 0.3s;
+        }
+        
+        .status-green {
+            background: rgba(0, 255, 136, 0.2);
+            color: #00ff88;
+        }
+        
+        .status-red {
+            background: rgba(255, 107, 107, 0.2);
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">
+            Snapdragon X Elite
+            <span class="tagline">Get Snapped</span>
+        </div>
+        <div class="status">✅ READY</div>
+    </div>
+    
+    <div class="main-content">
+        <div class="image-section">
+            <div class="completion-badge" id="completionBadge">FINISHED</div>
+            <div class="image-container">
+                <div class="generated-image" id="generatedImage">
+                    🎨 Waiting for generation...<br>
+                    <small style="opacity: 0.8; margin-top: 10px;">
+                        AI-powered image generation<br>
+                        powered by Snapdragon NPU
+                    </small>
+                </div>
+            </div>
+        </div>
+        
+        <div class="metrics-section">
+            <div class="metric-card">
+                <div class="metric-title">Generation Time</div>
+                <div class="metric-value">
+                    <span id="timeValue">0.0</span><span class="metric-unit" id="timeUnit">seconds</span>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">NPU Utilization</div>
+                <div class="metric-value">
+                    <span id="npuValue">0</span><span class="metric-unit" id="npuUnit">%</span>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">Memory Usage</div>
+                <div class="metric-value">
+                    <span id="memoryValue">0.0</span><span class="metric-unit" id="memoryUnit">GB</span>
+                </div>
+            </div>
+            
+            <div class="metric-card">
+                <div class="metric-title">Power Efficiency</div>
+                <div class="metric-value">
+                    <span id="powerValue">0</span><span class="metric-unit" id="powerUnit">W</span>
+                </div>
+            </div>
+            
+            <div class="progress-section">
+                <div class="progress-title">🎯 Generation Progress</div>
+                <div class="progress-bar">
+                    <div class="progress-fill"></div>
+                </div>
+                <div class="step-info" id="progressText">
+                    Steps: 0/20 | 0% Complete
+                </div>
+            </div>
+            
+            <div class="prompt-display">
+                💭 Prompt: <span id="promptDisplay">Waiting for prompt...</span>
+            </div>
+            
+            <div class="prompt-box">
+                <h3>🚀 Generate Image</h3>
+                <input type="text" id="promptInput" placeholder="Enter your prompt here...">
+                <button id="generateBtn">Generate</button>
+                <div class="sample-prompts">
+                    <p>Quick prompts:</p>
+                    <span class="sample-prompt" data-prompt="A futuristic cityscape with flying cars">Futuristic City</span>
+                    <span class="sample-prompt" data-prompt="A serene mountain landscape at sunset">Mountain Sunset</span>
+                    <span class="sample-prompt" data-prompt="Abstract art with vibrant colors">Abstract Art</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <span class="status-indicator status-red" id="llmStatus">● LLM Loading...</span>
+        <span class="status-indicator status-red" id="controlStatus">● Control PC Offline</span>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="js/demo-client.js"></script>
+    <script>
+        // Initialize Snapdragon theme
+        window.addEventListener('DOMContentLoaded', () => {
+            const client = new DemoClient('snapdragon');
+        });
+    </script>
+</body>
+</html>

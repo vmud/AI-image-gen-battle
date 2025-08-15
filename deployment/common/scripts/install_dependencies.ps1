@@ -196,10 +196,17 @@ safetensors==0.4.1
 onnxruntime>=1.16.0
 optimum[onnxruntime]==1.16.2
 
+# Web Framework for demo server
+flask>=2.0.0,<3.0.0
+flask-socketio>=5.0.0,<6.0.0
+flask-cors>=3.0.0,<5.0.0
+eventlet>=0.33.0,<0.36.0
+
 # Additional useful packages
 pillow>=8.0.0
 numpy>=1.21.0
 requests>=2.25.0
+psutil>=5.8.0
 "@
     
     $requirementsPath = "$env:TEMP\ai_demo_requirements.txt"

@@ -1,0 +1,172 @@
+{
+  "report_id": "947d7436-caf0-493f-9d8d-db7c8dc5b0ff_1755246184",
+  "generation_time": 1755246184.4259079,
+  "platform_type": "snapdragon",
+  "run_id": "947d7436-caf0-493f-9d8d-db7c8dc5b0ff",
+  "overall_status": "NOT READY",
+  "executive_summary": "Diagnostic completed for SNAPDRAGON platform with NOT READY status. Executed 6 tests with 1 passing (16.7% success rate) in 0.0 seconds. 5 test(s) failed and require attention before proceeding.",
+  "sections": [
+    {
+      "title": "Diagnostic Summary",
+      "content": "Key diagnostic metrics and system performance indicators.",
+      "data": {
+        "metrics": {
+          "total_tests": 6,
+          "passed_tests": 1,
+          "failed_tests": 5,
+          "success_rate": "16.7%",
+          "total_duration": "0.04s",
+          "cpu_usage": "0.0%",
+          "memory_usage": "70.5%",
+          "platform": "Unknown"
+        }
+      },
+      "section_type": "summary"
+    },
+    {
+      "title": "Test Results Details",
+      "content": "Detailed results for all 6 diagnostic tests.",
+      "data": {
+        "test_results": {
+          "Platform Detection": {
+            "status": "PASS",
+            "message": "Snapdragon platform detected: snapdragon with ONNX Runtime (QNN)",
+            "duration": 0.012406110763549805,
+            "details": {
+              "platform": "snapdragon",
+              "processor": "snapdragon",
+              "acceleration": "ONNX Runtime (QNN)"
+            },
+            "fix_commands": []
+          },
+          "Python Environment": {
+            "status": "FAIL",
+            "message": "Python 3.12 detected, requires Python 3.10",
+            "duration": 0.00012803077697753906,
+            "details": {
+              "current_version": "3.12",
+              "required": "3.10"
+            },
+            "fix_commands": [
+              "Install Python 3.10",
+              "Create virtual environment with: python3.10 -m venv .venv",
+              "Activate virtual environment"
+            ]
+          },
+          "AIImagePipeline Import": {
+            "status": "FAIL",
+            "message": "AIImagePipeline import OK but initialization failed: No module named 'diffusers'",
+            "duration": 0.013934850692749023,
+            "details": {
+              "import_success": true,
+              "init_error": "No module named 'diffusers'"
+            },
+            "fix_commands": [
+              "Install dependencies: pip install -r requirements.txt",
+              "Check platform-specific requirements",
+              "Review error logs for specific missing modules"
+            ]
+          },
+          "Hardware Acceleration": {
+            "status": "FAIL",
+            "message": "ONNX Runtime not installed",
+            "duration": 0.00011801719665527344,
+            "details": {},
+            "fix_commands": [
+              "Install ONNX Runtime: pip install onnxruntime",
+              "For NPU support: pip install onnxruntime-qnn",
+              "Install optimum: pip install optimum[onnxruntime]"
+            ]
+          },
+          "Model Accessibility": {
+            "status": "FAIL",
+            "message": "No models found and HuggingFace Hub inaccessible",
+            "duration": 0.00017690658569335938,
+            "details": {
+              "accessible_paths": [],
+              "found_models": [],
+              "huggingface_hub": false
+            },
+            "fix_commands": [
+              "Download models: Use prepare_models.ps1 script",
+              "Create models directory: mkdir C:\\AIDemo\\models",
+              "Check internet connection for HuggingFace Hub",
+              "Install huggingface_hub: pip install huggingface_hub"
+            ]
+          },
+          "Quick Performance Test": {
+            "status": "FAIL",
+            "message": "Performance test setup failed: No module named 'diffusers'",
+            "duration": 0.0001857280731201172,
+            "details": {},
+            "fix_commands": [
+              "Complete AIImagePipeline import test first",
+              "Verify hardware acceleration is working",
+              "Check model accessibility"
+            ]
+          }
+        }
+      },
+      "section_type": "details"
+    },
+    {
+      "title": "Performance Metrics",
+      "content": "Performance metrics collected during diagnostic execution.",
+      "data": {
+        "table_data": {
+          "headers": [
+            "Metric",
+            "Value",
+            "Unit",
+            "Status"
+          ],
+          "rows": []
+        },
+        "metrics": {}
+      },
+      "section_type": "table"
+    },
+    {
+      "title": "System Information",
+      "content": "System configuration and resource utilization during diagnostic execution.",
+      "data": {
+        "table_data": {
+          "headers": [
+            "Component",
+            "Value",
+            "Status"
+          ],
+          "rows": [
+            [
+              "CPU Usage",
+              "0.0%",
+              "Normal"
+            ],
+            [
+              "Memory Usage",
+              "70.5%",
+              "Normal"
+            ],
+            [
+              "Available Memory",
+              "7.1 GB",
+              "OK"
+            ],
+            [
+              "Disk Usage",
+              "27.7%",
+              "Normal"
+            ]
+          ]
+        }
+      },
+      "section_type": "table"
+    }
+  ],
+  "metadata": {
+    "recommendations": [
+      "Address 5 failed test(s): Python Environment, AIImagePipeline Import, Hardware Acceleration, Model Accessibility, Quick Performance Test",
+      "Verify NPU drivers and QNN provider installation"
+    ]
+  }
+}

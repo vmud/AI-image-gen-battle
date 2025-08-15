@@ -1,0 +1,61 @@
+{
+  "logging": {
+    "level": "INFO",
+    "output_format": "console",
+    "enable_file_logging": true,
+    "log_file_path": "diagnostic.log",
+    "max_log_size": 10485760,
+    "backup_count": 5,
+    "enable_structured_logging": false,
+    "include_stack_trace": true,
+    "context_lines": 3
+  },
+  "metrics": {
+    "enable_performance_metrics": true,
+    "enable_resource_monitoring": true,
+    "collection_interval": 0.1,
+    "enable_gpu_monitoring": true,
+    "enable_npu_monitoring": true,
+    "enable_memory_profiling": true,
+    "baseline_collection": true,
+    "detailed_timing": true
+  },
+  "storage": {
+    "enable_historical_storage": true,
+    "database_path": "diagnostic_history.db",
+    "retention_days": 30,
+    "enable_trend_analysis": true,
+    "baseline_threshold_days": 7,
+    "enable_alerting": false,
+    "performance_degradation_threshold": 0.2
+  },
+  "reporting": {
+    "enable_detailed_reports": false,
+    "output_formats": [
+      "json"
+    ],
+    "output_directory": "diagnostic_reports",
+    "include_charts": true,
+    "include_trends": true,
+    "include_baselines": true,
+    "enable_comparison": true,
+    "template_directory": "report_templates"
+  },
+  "platform": {
+    "intel_directml_timeout": 30.0,
+    "snapdragon_qnn_timeout": 15.0,
+    "performance_test_steps": {
+      "intel": 10,
+      "snapdragon": 4
+    },
+    "performance_test_resolution": [
+      512,
+      512
+    ],
+    "enable_fallback_testing": true,
+    "custom_model_paths": []
+  },
+  "enable_enhanced_mode": false,
+  "config_file_path": "diagnostic_config.json",
+  "validate_on_load": true
+}

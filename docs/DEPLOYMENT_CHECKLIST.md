@@ -41,12 +41,6 @@
 
 ## Demo Day Setup (30 minutes)
 
-### Physical Setup
-- [ ] Position both laptops for audience visibility
-- [ ] Connect displays/projectors if needed
-- [ ] Ensure stable network connection
-- [ ] Test screen visibility from audience perspective
-
 ### Software Startup
 - [ ] Start demo clients on both Windows machines
 - [ ] **NEW**: Verify AI models load successfully (may take 30-60 seconds)

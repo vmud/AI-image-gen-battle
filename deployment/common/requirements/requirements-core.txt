@@ -11,6 +11,8 @@ psutil>=5.8.0
 # === WEB FRAMEWORK ===
 flask>=2.0.0,<3.0.0
 flask-socketio>=5.0.0,<6.0.0
+flask-cors>=3.0.0,<5.0.0
+eventlet>=0.33.0,<0.36.0
 
 # === ML FRAMEWORK BASE ===
 # PyTorch CPU versions for maximum compatibility
