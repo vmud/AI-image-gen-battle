@@ -19,12 +19,20 @@ except Exception:
     Image = None  # type: ignore
 import platform
 
+# Emergency mode integration
+try:
+    from emergency_simulator import EmergencyImageGenerator, EmergencyModeActivator, get_emergency_activator
+    EMERGENCY_MODE_AVAILABLE = True
+except ImportError:
+    EMERGENCY_MODE_AVAILABLE = False
+    logger.warning("Emergency mode not available - emergency_simulator module not found")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class AIImageGenerator:
-    """Platform-optimized image generation pipeline with Intel performance benchmarking"""
+    """Platform-optimized image generation pipeline with Intel performance benchmarking and emergency mode"""
     
     def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
         self.platform_info = platform_info
@@ -36,6 +44,14 @@ class AIImageGenerator:
         self.device = None
         self.optimization_backend = None
         self.model_loaded = False
+        
+        # Emergency mode integration
+        self.emergency_mode = False
+        self.emergency_generator = None
+        if EMERGENCY_MODE_AVAILABLE:
+            self.emergency_activator = get_emergency_activator()
+        else:
+            self.emergency_activator = None
         
         # Intel-specific performance targets
         self.intel_performance_targets = {
@@ -271,14 +287,90 @@ class AIImageGenerator:
         progress_callback: Optional[Callable] = None
     ) -> Tuple[Any, Dict[str, Any]]:
         """
-        Generate high-quality image with Intel-optimized performance benchmarking
+        Generate high-quality image with Intel-optimized performance benchmarking and emergency fallback
         
         Returns:
             Tuple of (PIL Image, comprehensive metrics dict)
         """
         
+        # Check if emergency mode should be activated
+        if self.emergency_activator and self.emergency_activator.should_activate_emergency_mode():
+            return self._generate_emergency_mode(prompt, negative_prompt, steps, guidance_scale,
+                                               resolution, seed, progress_callback)
+        
+        # Check if pipeline is available
         if self.pipeline is None:
-            raise RuntimeError("Pipeline not initialized - run model loading first")
+            error_msg = "Pipeline not initialized - run model loading first"
+            logger.error(error_msg)
+            
+            # Activate emergency mode if available
+            if self.emergency_activator and EMERGENCY_MODE_AVAILABLE:
+                logger.warning("Pipeline unavailable, activating emergency mode")
+                return self._generate_emergency_mode(prompt, negative_prompt, steps, guidance_scale,
+                                                   resolution, seed, progress_callback)
+            else:
+                raise RuntimeError(error_msg)
+        
+        # Try normal generation with emergency fallback
+        try:
+            return self._generate_normal_mode(prompt, negative_prompt, steps, guidance_scale,
+                                            resolution, seed, progress_callback)
+        except Exception as e:
+            logger.error(f"Normal generation failed: {e}")
+            
+            # Check if emergency mode should activate based on the error
+            if (self.emergency_activator and EMERGENCY_MODE_AVAILABLE and
+                self.emergency_activator.should_activate_emergency_mode(error=e)):
+                
+                logger.warning("Activating emergency mode due to generation failure")
+                return self._generate_emergency_mode(prompt, negative_prompt, steps, guidance_scale,
+                                                   resolution, seed, progress_callback)
+            else:
+                # Re-raise if emergency mode not available or not appropriate
+                raise
+    
+    def _generate_emergency_mode(
+        self,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+        steps: Optional[int] = None,
+        guidance_scale: Optional[float] = None,
+        resolution: Optional[Tuple[int, int]] = None,
+        seed: Optional[int] = None,
+        progress_callback: Optional[Callable] = None
+    ) -> Tuple[Any, Dict[str, Any]]:
+        """Generate image using emergency simulation mode"""
+        
+        if not self.emergency_mode:
+            # Activate emergency mode
+            self.emergency_generator = self.emergency_activator.activate_emergency_mode(
+                self.platform_info, original_generator=self
+            )
+            self.emergency_mode = True
+        
+        # Use emergency generator
+        return self.emergency_generator.generate_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            resolution=resolution,
+            seed=seed,
+            progress_callback=progress_callback
+        )
+    
+    def _generate_normal_mode(
+        self,
+        prompt: str,
+        negative_prompt: Optional[str] = None,
+        steps: Optional[int] = None,
+        guidance_scale: Optional[float] = None,
+        resolution: Optional[Tuple[int, int]] = None,
+        seed: Optional[int] = None,
+        progress_callback: Optional[Callable] = None
+    ) -> Tuple[Any, Dict[str, Any]]:
+        """Generate image using normal AI pipeline"""
+        
         assert self.pipeline is not None
         
         # Use Intel-optimized defaults
@@ -313,7 +405,8 @@ class AIImageGenerator:
             "resolution": f"{resolution[0]}x{resolution[1]}",
             "steps": steps,
             "guidance_scale": guidance_scale,
-            "model_loaded": self.model_loaded
+            "model_loaded": self.model_loaded,
+            "emergency_mode": False
         }
         
         # Performance monitoring setup
@@ -426,6 +519,52 @@ class AIImageGenerator:
             metrics.update(error_metrics)
             logger.error(f"Image generation failed: {e}")
             raise
+    
+    def is_emergency_mode_active(self) -> bool:
+        """Check if emergency mode is currently active"""
+        return self.emergency_mode
+    
+    def get_emergency_status(self) -> Dict[str, Any]:
+        """Get emergency mode status information"""
+        if self.emergency_activator:
+            activator_status = self.emergency_activator.get_status()
+        else:
+            activator_status = {'emergency_active': False, 'activation_reasons': []}
+        
+        return {
+            'emergency_mode_available': EMERGENCY_MODE_AVAILABLE,
+            'emergency_mode_active': self.emergency_mode,
+            'emergency_generator_initialized': self.emergency_generator is not None,
+            **activator_status
+        }
+    
+    def force_emergency_mode(self) -> bool:
+        """Manually activate emergency mode for testing"""
+        if not EMERGENCY_MODE_AVAILABLE:
+            logger.error("Emergency mode not available")
+            return False
+        
+        if not self.emergency_mode:
+            logger.info("Manually activating emergency mode")
+            os.environ['EMERGENCY_MODE'] = 'true'
+            self.emergency_generator = self.emergency_activator.activate_emergency_mode(
+                self.platform_info, original_generator=self
+            )
+            self.emergency_mode = True
+        
+        return True
+    
+    def deactivate_emergency_mode(self) -> bool:
+        """Deactivate emergency mode and return to normal operation"""
+        if self.emergency_mode and self.emergency_activator:
+            logger.info("Deactivating emergency mode")
+            self.emergency_activator.deactivate_emergency_mode()
+            self.emergency_mode = False
+            self.emergency_generator = None
+            if 'EMERGENCY_MODE' in os.environ:
+                del os.environ['EMERGENCY_MODE']
+            return True
+        return False
     
     def _analyze_intel_performance(self, generation_time: float, steps: int, memory_used: float) -> Dict[str, Any]:
         """Analyze Intel DirectML performance against targets"""

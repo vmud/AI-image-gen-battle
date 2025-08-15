@@ -35,6 +35,14 @@ from platform_detection import PlatformDetector
 from ai_pipeline import AIImageGenerator
 from error_mitigation import ErrorMitigationSystem, JobRecoveryManager, with_error_recovery
 
+# Emergency mode integration
+try:
+    from emergency_simulator import get_emergency_activator
+    EMERGENCY_MODE_AVAILABLE = True
+except ImportError:
+    EMERGENCY_MODE_AVAILABLE = False
+    print("Warning: Emergency mode not available - emergency_simulator module not found")
+
 class DemoDisplay:
     def __init__(self, platform_info: Dict[str, Any]):
         self.platform_info = platform_info
@@ -878,6 +886,16 @@ class DemoDisplay:
         
         # Get health status
         health_summary = self.error_mitigation.get_health_summary()
+        
+        # Get emergency mode status
+        emergency_status = {}
+        if self.ai_generator and hasattr(self.ai_generator, 'get_emergency_status'):
+            emergency_status = self.ai_generator.get_emergency_status()
+        else:
+            emergency_status = {
+                'emergency_mode_available': EMERGENCY_MODE_AVAILABLE,
+                'emergency_mode_active': False
+            }
             
         return {
             'status': 'active' if self.demo_active else 'idle',
@@ -899,7 +917,8 @@ class DemoDisplay:
             },
             'image_url': image_url,
             'current_job_id': self.current_job_id,
-            'health': health_summary
+            'health': health_summary,
+            'emergency_mode': emergency_status
         }
         
     def validate_environment(self):
@@ -1298,6 +1317,46 @@ class NetworkServer:
             health = self.display.error_mitigation.get_health_summary()
             status_code = 200 if health['healthy'] else 503
             return jsonify(health), status_code
+        
+        @self.app.route('/emergency', methods=['GET'])
+        def get_emergency_status():
+            """Get emergency mode status."""
+            if self.display.ai_generator and hasattr(self.display.ai_generator, 'get_emergency_status'):
+                status = self.display.ai_generator.get_emergency_status()
+            else:
+                status = {
+                    'emergency_mode_available': EMERGENCY_MODE_AVAILABLE,
+                    'emergency_mode_active': False,
+                    'activation_reasons': []
+                }
+            return jsonify(status)
+        
+        @self.app.route('/emergency/activate', methods=['POST'])
+        def activate_emergency_mode():
+            """Manually activate emergency mode."""
+            if not EMERGENCY_MODE_AVAILABLE:
+                return jsonify({'success': False, 'message': 'Emergency mode not available'}), 400
+            
+            if self.display.ai_generator and hasattr(self.display.ai_generator, 'force_emergency_mode'):
+                success = self.display.ai_generator.force_emergency_mode()
+                if success:
+                    return jsonify({'success': True, 'message': 'Emergency mode activated'})
+                else:
+                    return jsonify({'success': False, 'message': 'Failed to activate emergency mode'}), 500
+            else:
+                return jsonify({'success': False, 'message': 'AI generator not available'}), 400
+        
+        @self.app.route('/emergency/deactivate', methods=['POST'])
+        def deactivate_emergency_mode():
+            """Deactivate emergency mode."""
+            if self.display.ai_generator and hasattr(self.display.ai_generator, 'deactivate_emergency_mode'):
+                success = self.display.ai_generator.deactivate_emergency_mode()
+                if success:
+                    return jsonify({'success': True, 'message': 'Emergency mode deactivated'})
+                else:
+                    return jsonify({'success': False, 'message': 'Emergency mode was not active'})
+            else:
+                return jsonify({'success': False, 'message': 'AI generator not available'}), 400
     
     def setup_socket_handlers(self):
         """Setup Socket.IO event handlers."""
