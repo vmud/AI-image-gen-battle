@@ -809,21 +809,16 @@ function Test-IntelHardwareRequirements {
             Write-VerboseInfo "Could not verify AVX-512 support"
         }
         
-        # Check RAM
+        # Check RAM (Skip strict requirement - 15GB detected for 16GB systems is common)
         Write-VerboseInfo "Checking system memory..."
         $memInfo = Get-WmiObject Win32_ComputerSystem
         $ram = [math]::Round($memInfo.TotalPhysicalMemory / 1GB)
         $hardwareStatus.SystemRAM = $ram
         
-        if ($ram -lt 16) {
-            $hardwareStatus.Errors += "Insufficient RAM: $($ram)GB (16GB minimum required)"
-            Write-ErrorMsg "RAM: $($ram)GB (16GB minimum required for FP16 models)"
-        } elseif ($ram -lt 32) {
-            $hardwareStatus.Warnings += "RAM below recommended: $($ram)GB (32GB recommended)"
-            Write-WarningMsg "RAM: $($ram)GB (32GB recommended for optimal performance)"
-        } else {
-            Write-Success "RAM: $($ram)GB"
-        }
+        # Skip RAM check as requested - 16GB systems often show as 15GB (system reserved memory)
+        Write-Success "RAM: $($ram)GB (check skipped - assuming sufficient)"
+        Write-VerboseInfo "Note: RAM check skipped to avoid false negatives on 16GB systems"
+        $hardwareStatus.SystemRAM = $ram
         
         # Check GPU and DirectX 12
         Write-VerboseInfo "Checking GPU and DirectX 12 support..."
@@ -939,8 +934,11 @@ function Show-HardwareConfirmation {
 function Install-Python {
     Write-StepProgress "Checking Python installation"
     
-    $pythonVersions = @("3.10", "3.9")
+    # Only support Python 3.10 for DirectML compatibility (research confirms 3.11+ issues)
+    $pythonVersions = @("3.10")
     $pythonFound = $false
+    
+    Write-Info "Enforcing Python 3.10 requirement (torch-directml compatibility)..."
     
     foreach ($version in $pythonVersions) {
         $pythonPaths = @(
@@ -1005,7 +1003,9 @@ function Install-Python {
             }
         }
     } elseif (!$pythonFound) {
-        Write-ErrorMsg "Python 3.9/3.10 not found"
+        Write-ErrorMsg "Python 3.10 not found"
+        Write-ErrorMsg "torch-directml requires Python 3.10 specifically (not 3.9 or 3.11+)"
+        Write-ErrorMsg "Please install Python 3.10.11 from: https://www.python.org/downloads/release/python-31011/"
         return $false
     }
     

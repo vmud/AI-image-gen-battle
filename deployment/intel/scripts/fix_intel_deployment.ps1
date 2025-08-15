@@ -50,11 +50,55 @@ function Write-FixSuccess {
     Write-Host "[SUCCESS] $Message" -ForegroundColor Cyan
 }
 
-# Function to check Python 3.10 installation
-function Test-Python310Required {
-    Write-FixInfo "Verifying Python 3.10 installation (required for torch-directml)..."
+# Function to install Python 3.10 automatically
+function Install-Python310 {
+    Write-FixInfo "Installing Python 3.10.11 automatically..."
     
-    # Look for Python 3.10 specifically - NO 3.9 support
+    try {
+        # Create temp directory if needed
+        if (!(Test-Path $DEMO_BASE)) {
+            New-Item -ItemType Directory -Path $DEMO_BASE -Force | Out-Null
+        }
+        
+        $pythonUrl = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
+        $installer = "$DEMO_BASE\python-3.10.11-amd64.exe"
+        
+        Write-FixInfo "Downloading Python 3.10.11 installer..."
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($pythonUrl, $installer)
+        
+        Write-FixInfo "Installing Python 3.10.11..."
+        $installArgs = @("/quiet", "InstallAllUsers=1", "PrependPath=1", "TargetDir=C:\Python310")
+        Start-Process -FilePath $installer -ArgumentList $installArgs -Wait
+        
+        # Update PATH to include Python 3.10
+        $env:Path = "C:\Python310;C:\Python310\Scripts;$env:Path"
+        
+        # Verify installation
+        $versionCheck = & C:\Python310\python.exe --version 2>&1
+        if ($versionCheck -match "Python 3\.10") {
+            Write-FixSuccess "Python 3.10 installed successfully: $versionCheck"
+        } else {
+            Write-FixError "Python 3.10 installation verification failed"
+            return $false
+        }
+        
+        # Clean up installer
+        Remove-Item $installer -Force -ErrorAction SilentlyContinue
+        
+        return $true
+        
+    } catch {
+        Write-FixError "Failed to install Python 3.10: $_"
+        return $false
+    }
+}
+
+# Function to check Python 3.10 installation or install it
+function Test-Python310Required {
+    Write-FixInfo "Checking for Python 3.10 installation (required for torch-directml)..."
+    
+    # Look for Python 3.10 specifically
     $python310Paths = @(
         "C:\Python310\python.exe",
         "$env:LOCALAPPDATA\Programs\Python\Python310\python.exe",
@@ -70,17 +114,10 @@ function Test-Python310Required {
                 $version = & $path --version 2>&1
                 if ($version -match "Python 3\.10\.(\d+)") {
                     $buildNumber = [int]$matches[1]
-                    if ($buildNumber -ge 6) {
-                        Write-FixSuccess "Found Python 3.10.$buildNumber at $path"
-                        $python310Found = $true
-                        $python310Path = Split-Path $path -Parent
-                        break
-                    } else {
-                        Write-FixWarning "Python 3.10.$buildNumber found but 3.10.6+ recommended"
-                        $python310Found = $true
-                        $python310Path = Split-Path $path -Parent
-                        break
-                    }
+                    Write-FixSuccess "Found Python 3.10.$buildNumber at $path"
+                    $python310Found = $true
+                    $python310Path = Split-Path $path -Parent
+                    break
                 }
             } catch {
                 continue
@@ -89,10 +126,8 @@ function Test-Python310Required {
     }
     
     if (-not $python310Found) {
-        Write-FixError "Python 3.10 not found!"
-        Write-FixError "torch-directml requires Python 3.10 (NOT 3.9 or 3.11+)"
-        Write-FixError "Please install Python 3.10.11 from: https://www.python.org/downloads/release/python-31011/"
-        return $false
+        Write-FixWarning "Python 3.10 not found. Installing automatically..."
+        return Install-Python310
     }
     
     # Ensure Python 3.10 is in PATH
@@ -169,10 +204,42 @@ Write-Host @"
 
 Write-FixInfo "Starting Python 3.10 enforcement and DirectML fix..."
 
-# Check Python 3.10 requirement first
+# Check Python 3.10 requirement - install if not found
 if (-not (Test-Python310Required)) {
-    Write-FixError "Python 3.10 is required but not found. Exiting."
-    exit 1
+    Write-FixWarning "Python 3.10 not found. Installing Python 3.10.11..."
+    
+    # Install Python 3.10 automatically
+    try {
+        $pythonUrl = "https://www.python.org/ftp/python/3.10.11/python-3.10.11-amd64.exe"
+        $installer = "$env:TEMP\python-3.10.11-amd64.exe"
+        
+        Write-FixInfo "Downloading Python 3.10.11 installer..."
+        $webClient = New-Object System.Net.WebClient
+        $webClient.DownloadFile($pythonUrl, $installer)
+        
+        Write-FixInfo "Installing Python 3.10.11..."
+        $installArgs = @("/quiet", "InstallAllUsers=1", "PrependPath=1", "TargetDir=C:\Python310")
+        Start-Process -FilePath $installer -ArgumentList $installArgs -Wait
+        
+        # Update PATH to include Python 3.10
+        $env:Path = "C:\Python310;C:\Python310\Scripts;$env:Path"
+        
+        # Verify installation
+        $versionCheck = & C:\Python310\python.exe --version 2>&1
+        if ($versionCheck -match "Python 3\.10") {
+            Write-FixSuccess "Python 3.10 installed successfully: $versionCheck"
+        } else {
+            Write-FixError "Python 3.10 installation verification failed"
+            exit 1
+        }
+        
+        # Clean up installer
+        Remove-Item $installer -Force -ErrorAction SilentlyContinue
+        
+    } catch {
+        Write-FixError "Failed to install Python 3.10: $_"
+        exit 1
+    }
 }
 
 # Check Windows updates
