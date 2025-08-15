@@ -168,28 +168,45 @@ class EmergencyImageGenerator:
         return 'abstract'
     
     def select_emergency_image(self, prompt: str) -> Path:
-        """Select appropriate emergency image based on prompt"""
-        category = self.categorize_prompt(prompt)
-        
-        # Use prompt hash to consistently select same image for same prompt
-        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()
-        variant = int(prompt_hash[:2], 16) % 3  # 0-2 based on hash
-        
+        """Select random emergency image from available assets"""
         platform = self.platform_info.get('platform_type', 'generic')
-        filename = f"emergency_{category}_{variant}_{platform}.png"
-        image_path = self.emergency_assets_dir / filename
         
-        # Fallback to first variant if specific one doesn't exist
-        if not image_path.exists():
-            filename = f"emergency_{category}_0_{platform}.png"
-            image_path = self.emergency_assets_dir / filename
+        # Get all available emergency images for this platform
+        available_images = []
+        categories = list(self.prompt_categories.keys())
         
-        # Final fallback to abstract if category doesn't exist
-        if not image_path.exists():
-            filename = f"emergency_abstract_0_{platform}.png"
-            image_path = self.emergency_assets_dir / filename
+        for category in categories:
+            for variant in range(3):  # 0, 1, 2
+                filename = f"emergency_{category}_{variant}_{platform}.png"
+                image_path = self.emergency_assets_dir / filename
+                if image_path.exists():
+                    available_images.append(image_path)
         
-        return image_path
+        # If no images exist yet, create them first
+        if not available_images:
+            logger.info("No emergency images found, creating initial set...")
+            self.ensure_emergency_assets()
+            # Re-scan for created images
+            for category in categories:
+                for variant in range(3):
+                    filename = f"emergency_{category}_{variant}_{platform}.png"
+                    image_path = self.emergency_assets_dir / filename
+                    if image_path.exists():
+                        available_images.append(image_path)
+        
+        # Select random image from available ones
+        if available_images:
+            selected_image = random.choice(available_images)
+            logger.info(f"Randomly selected emergency image: {selected_image.name}")
+            return selected_image
+        
+        # Ultimate fallback - create abstract image
+        fallback_filename = f"emergency_abstract_0_{platform}.png"
+        fallback_path = self.emergency_assets_dir / fallback_filename
+        if not fallback_path.exists():
+            self.create_placeholder_image(fallback_path, 'abstract', 0)
+        
+        return fallback_path
     
     def simulate_realistic_timing(self, steps: int) -> List[float]:
         """Generate realistic step timing intervals"""
