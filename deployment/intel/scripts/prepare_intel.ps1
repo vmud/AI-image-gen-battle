@@ -1512,55 +1512,77 @@ print('=== End Intel Demo Verification ===')
 "@
         
         Write-VerboseInfo "Running Intel demo verification script..."
-        # Capture both stdout and stderr, but filter out known deprecation warnings
-        $verificationOutput = $verifyScript | & python - 2>&1 | Where-Object {
-            $line = $_.ToString()
-            # Filter out specific deprecation warnings and cache migration messages that don't affect functionality
-            -not ($line -match "_register_pytree_node.*is depr[ei]cated") -and
-            -not ($line -match "FutureWarning:.*transformers") -and
-            -not ($line -match "DeprecationWarning:.*torch") -and
-            -not ($line -match "cache for model files.*has been updated") -and
-            -not ($line -match "migrating.*old cache") -and
-            -not ($line -match "move_cache") -and
-            -not ($line -match "Transformers v4\.22\.0") -and
-            -not ($line -match "one-time only operation")
-        }
-        
-        $verificationOutput | ForEach-Object {
-            $line = $_.ToString()
-            if ($line -match "^SUCCESS:") {
-                Write-Success $line.Replace("SUCCESS: ", "")
-            } elseif ($line -match "^ERROR:") {
-                Write-ErrorMsg $line.Replace("ERROR: ", "")
-            } elseif ($line -match "^WARNING:") {
-                Write-WarningMsg $line.Replace("WARNING: ", "")
-            } elseif ($line -match "FutureWarning|DeprecationWarning") {
-                Write-VerboseInfo "Filtered warning: $line"
+        try {
+            # Run verification and normalize to strings first
+            $verificationRaw = $verifyScript | & python - 2>&1 | ForEach-Object { $_.ToString() }
+            
+            # Filter out known noisy warnings/messages
+            $verificationOutput = $verificationRaw | Where-Object {
+                $line = $_
+                -not ($line -match "_register_pytree_node.*is depr[ei]cated") -and
+                -not ($line -match "FutureWarning:.*transformers") -and
+                -not ($line -match "DeprecationWarning:.*torch") -and
+                -not ($line -match "cache for model files.*has been updated") -and
+                -not ($line -match "migrating.*old cache") -and
+                -not ($line -match "move_cache") -and
+                -not ($line -match "Transformers v4\.22\.0") -and
+                -not ($line -match "one-time only operation")
+            }
+            
+            # Emit parsed lines; downgrade Python "ERROR:" lines to warnings so remoting contexts don't hard-fail
+            $verificationOutput | ForEach-Object {
+                $line = $_
+                if ($line -match "^SUCCESS:") {
+                    Write-Success ($line.Replace("SUCCESS: ", ""))
+                } elseif ($line -match "^ERROR:") {
+                    Write-WarningMsg ($line.Replace("ERROR: ", ""))
+                } elseif ($line -match "^WARNING:") {
+                    Write-WarningMsg ($line.Replace("WARNING: ", ""))
+                } elseif ($line -match "FutureWarning|DeprecationWarning") {
+                    Write-VerboseInfo "Filtered warning: $line"
+                } else {
+                    Write-Info $line
+                }
+            }
+            
+            # Make a single string for robust matching
+            $joined = ($verificationOutput -join "`n")
+            
+            if ($joined -match "SUCCESS: DirectML is fully functional") {
+                Write-Success "Intel demo environment verification completed successfully"
+                Set-StepCompleted "intel_acceleration" @{
+                    DirectMLFunctional = $true
+                    PackagesInstalled = $accelerationStages.Count
+                    VerificationPassed = $true
+                }
+            } elseif ($joined -match "DirectML acceleration will not be available") {
+                Write-WarningMsg "DirectML not available - falling back to CPU processing"
+                Write-WarningMsg "Performance will be significantly slower without GPU acceleration"
+                Set-StepCompleted "intel_acceleration" @{
+                    DirectMLFunctional = $false
+                    PackagesInstalled = $accelerationStages.Count
+                    VerificationPassed = $false
+                    FallbackMode = "CPU"
+                }
             } else {
-                Write-Info $line
+                Write-WarningMsg "Intel demo verification completed with issues"
+                Write-Info "Review the verification output above for details"
+                Set-StepCompleted "intel_acceleration" @{
+                    DirectMLFunctional = $false
+                    PackagesInstalled = $accelerationStages.Count
+                    VerificationPassed = $false
+                }
             }
-        }
-        
-        # Check if DirectML verification was successful
-        if ($verificationOutput -match "SUCCESS: DirectML is fully functional") {
-            Write-Success "Intel demo environment verification completed successfully"
-            Set-StepCompleted "intel_acceleration" @{
-                DirectMLFunctional = $true
-                PackagesInstalled = $accelerationStages.Count
-                VerificationPassed = $true
-            }
-        } elseif ($verificationOutput -match "DirectML acceleration will not be available") {
-            Write-WarningMsg "DirectML not available - falling back to CPU processing"
-            Write-WarningMsg "Performance will be significantly slower without GPU acceleration"
+        } catch {
+            # Prevent RemoteException from stopping the setup; log and continue
+            Write-WarningMsg "Verification step encountered an exception: $($_.Exception.Message)"
+            Write-VerboseInfo "Verification exception detail:`n$($_ | Out-String)"
             Set-StepCompleted "intel_acceleration" @{
                 DirectMLFunctional = $false
                 PackagesInstalled = $accelerationStages.Count
                 VerificationPassed = $false
-                FallbackMode = "CPU"
+                ExceptionInVerification = $true
             }
-        } else {
-            Write-WarningMsg "Intel demo verification completed with issues"
-            Write-Info "Review the verification output above for details"
         }
     }
     
