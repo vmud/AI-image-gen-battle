@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Emergency Demo Image Generator
+Standalone Demo Image Generator
 Creates placeholder images for the "futuristic retail store" prompt
 """
 
@@ -102,7 +102,7 @@ def main():
         create_placeholder_image(filename, "Snapdragon", i)
     
     print(f"Successfully generated 40 images in {assets_dir}/")
-    print("Images are ready for the emergency demo!")
+    print("Images are ready for the standalone demo!")
 
 if __name__ == "__main__":
     main()

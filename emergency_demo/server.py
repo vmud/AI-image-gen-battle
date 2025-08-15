@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Emergency Demo - Standalone Web Server
-Minimal HTTP server for the AI Image Generation Battle emergency demo
+Standalone Demo - Web Server
+Minimal HTTP server for the AI Image Generation Battle standalone demo
 """
 
 import http.server
@@ -13,7 +13,7 @@ import threading
 import time
 from urllib.parse import urlparse
 
-class EmergencyDemoServer:
+class StandaloneDemoServer:
     def __init__(self, port=8080):
         self.port = port
         self.server = None
@@ -29,7 +29,7 @@ class EmergencyDemoServer:
             handler = http.server.SimpleHTTPRequestHandler
             self.server = socketserver.TCPServer(("", self.port), handler)
             
-            print(f"Emergency Demo Server starting on port {self.port}")
+            print(f"Standalone Demo Server starting on port {self.port}")
             print(f"Demo URL: http://localhost:{self.port}")
             print("-" * 50)
             
@@ -74,7 +74,7 @@ class EmergencyDemoServer:
     def run(self, open_browser=True):
         """Run the complete demo server"""
         print("=" * 60)
-        print("AI IMAGE GENERATION BATTLE - EMERGENCY DEMO")
+        print("AI IMAGE GENERATION BATTLE - STANDALONE DEMO")
         print("=" * 60)
         
         if not self.start_server():
@@ -102,7 +102,7 @@ class EmergencyDemoServer:
                 
         except KeyboardInterrupt:
             self.stop_server()
-            print("\nServer stopped. Thank you for using Emergency Demo!")
+            print("\nServer stopped. Thank you for using Standalone Demo!")
             return True
 
 def main():
@@ -128,7 +128,7 @@ def main():
         print("Image generation may not work properly.")
     
     # Start the demo server
-    demo_server = EmergencyDemoServer(port)
+    demo_server = StandaloneDemoServer(port)
     return demo_server.run()
 
 if __name__ == "__main__":

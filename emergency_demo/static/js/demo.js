@@ -1,9 +1,9 @@
 /**
- * Emergency Demo - JavaScript Simulation Engine
+ * Standalone Demo - JavaScript Simulation Engine
  * Handles platform selection, demo simulation, and state management
  */
 
-class EmergencyDemo {
+class StandaloneDemo {
     constructor() {
         this.currentPlatform = null;
         this.isGenerating = false;
@@ -267,7 +267,7 @@ class EmergencyDemo {
 }
 
 // Global instance
-const demo = new EmergencyDemo();
+const demo = new StandaloneDemo();
 
 // Global functions for HTML event handlers
 function selectPlatform(platform) {
@@ -284,7 +284,7 @@ function goBack() {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('Emergency Demo initialized');
+    console.log('Standalone Demo initialized');
     console.log('Available platforms:', Object.keys(demo.platformConfigs));
 });
 

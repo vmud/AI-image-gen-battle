@@ -1,4 +1,4 @@
-# AI Image Generation Battle - Emergency Demo
+# AI Image Generation Battle - Standalone Demo
 
 A completely standalone demo showcasing AI image generation performance comparison between Intel and Snapdragon platforms.
 
@@ -22,7 +22,7 @@ A completely standalone demo showcasing AI image generation performance comparis
 
 ### Manual Start
 ```bash
-cd emergency_demo
+cd standalone_demo
 python server.py
 ```
 Then open `http://localhost:8080` in your browser.
@@ -30,7 +30,7 @@ Then open `http://localhost:8080` in your browser.
 ## Directory Structure
 
 ```
-emergency_demo/
+standalone_demo/
 ├── index.html              # Main demo interface
 ├── server.py              # Standalone Python web server
 ├── launch_demo.bat         # Windows launcher script
@@ -138,7 +138,7 @@ python server.py 8081  # Use port 8081 instead of 8080
 - Clear browser cache
 - Try a different browser
 
-## Emergency Mode Purpose
+## Standalone Demo Purpose
 
 This standalone demo is designed for:
 - **Trade shows and demos** where internet connectivity is unreliable
@@ -148,11 +148,11 @@ This standalone demo is designed for:
 
 ## Support
 
-This is a self-contained emergency demo. For the full AI Image Generation Battle experience with real AI models, please refer to the main project documentation.
+This is a self-contained standalone demo. For the full AI Image Generation Battle experience with real AI models, please refer to the main project documentation.
 
 ---
 
-**Emergency Demo Version**: 1.0  
-**Generated Images**: 40 (futuristic retail store theme)  
-**Platforms Supported**: Intel, Snapdragon X Elite  
+**Standalone Demo Version**: 1.0
+**Generated Images**: 40 (futuristic retail store theme)
+**Platforms Supported**: Intel, Snapdragon X Elite
 **Last Updated**: $(date)

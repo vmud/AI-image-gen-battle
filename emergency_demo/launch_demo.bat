@@ -1,11 +1,11 @@
 @echo off
-REM Emergency Demo Launcher for AI Image Generation Battle
+REM Standalone Demo Launcher for AI Image Generation Battle
 REM This batch file starts the standalone demo server
 
-title AI Image Generation Battle - Emergency Demo
+title AI Image Generation Battle - Standalone Demo
 
 echo ============================================================
-echo AI IMAGE GENERATION BATTLE - EMERGENCY DEMO
+echo AI IMAGE GENERATION BATTLE - STANDALONE DEMO
 echo ============================================================
 echo.
 
@@ -51,7 +51,7 @@ if not exist "static\js\demo.js" (
     exit /b 1
 )
 
-echo Starting Emergency Demo Server...
+echo Starting Standalone Demo Server...
 echo.
 echo Features:
 echo - Platform selection (Intel vs Snapdragon)
