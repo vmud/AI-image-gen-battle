@@ -1251,28 +1251,15 @@ function Install-IntelAcceleration {
     
     $accelerationStages = @(
         @{
-            Name = "PyTorch CPU"
-            Packages = @("torch==2.4.1", "torchvision==0.19.1")
-            IndexUrl = "https://download.pytorch.org/whl/cpu"
-            Critical = $true
-        },
-        @{
-            Name = "DirectML"
+            Name = "DirectML (PyTorch)"
             Packages = @("torch-directml")
             IndexUrl = $null
             PreRelease = $false
             Critical = $true
-            UseLegacyResolver = $true
         },
         @{
             Name = "ONNX DirectML"
             Packages = @("onnxruntime-directml>=1.16.0")
-            Critical = $false
-        },
-        @{
-            Name = "Intel Extensions"
-            Packages = @("intel_extension_for_pytorch")
-            IndexUrl = "https://pytorch-extension.intel.com/release-whl/stable/cpu/us/"
             Critical = $false
         },
         @{
@@ -1512,7 +1499,7 @@ print('=== End Intel Demo Verification ===')
         
         Write-VerboseInfo "Running Intel demo verification script..."
         # Capture both stdout and stderr, but filter out known deprecation warnings
-        $verificationOutput = $verifyScript | & python 2>&1 | Where-Object {
+        $verificationOutput = $verifyScript | & python - 2>&1 | Where-Object {
             $line = $_.ToString()
             # Filter out specific deprecation warnings and cache migration messages that don't affect functionality
             -not ($line -match "_register_pytree_node.*is depr[ei]cated") -and

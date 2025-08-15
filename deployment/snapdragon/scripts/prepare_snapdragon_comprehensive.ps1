@@ -65,27 +65,24 @@ This is ONE complete SDXL Lightning model optimized for Snapdragon NPU accelerat
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
+param(
+    [switch]$CheckOnly,
+    [switch]$Force,
+    [switch]$SkipModelDownload,
+    [switch]$UseHttpRange,
+    [string]$LogPath = 'C:\AIDemo\logs',
+    [ValidateSet('Speed','Balanced','Quality')][string]$OptimizationProfile = 'Speed'  # NPU optimized for speed
+)
 
 # === Encoding-safe symbol helpers ===
 $Script:CheckMark = [char]0x2713  # ✓
 $Script:CrossMark = [char]0x2717  # ✗
-function Normalize-VerificationLine {
-    param([string]$line)
-    if ($null -eq $line) { return $line }
-    $line = $line -replace 'âœ“', ($Script:CheckMark)  # mis-decoded ✓
-    $line = $line -replace 'âœ—', ($Script:CrossMark)  # mis-decoded ✗
-    return $line
+
+# Helper function to normalize verification output lines
+function Format-VerificationLine {
+    param([string]$Line)
+    return $Line
 }
-# ====================================
-param(
-    [switch]$CheckOnly = $false,
-    [switch]$Force = $false,
-    [switch]$SkipModelDownload = $false,
-    [switch]$UseHttpRange = $true,
-    [string]$LogPath = "C:\AIDemo\logs",
-    [ValidateSet('Speed', 'Balanced', 'Quality')]
-    [string]$OptimizationProfile = 'Speed'  # NPU optimized for speed
-)
 
 # Script configuration
 $ErrorActionPreference = "Stop"
@@ -256,7 +253,7 @@ function New-DeploymentState {
 function Save-DeploymentState {
     param([string]$Context = "General")
     
-    if ($script:deploymentState -eq $null) { return }
+    if ($null -eq $script:deploymentState) { return }
     
     try {
         $script:deploymentState.LastUpdate = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
@@ -271,7 +268,7 @@ function Save-DeploymentState {
 function Test-StepCompleted {
     param([string]$StepName)
     
-    if ($script:deploymentState -eq $null) { return $false }
+    if ($null -eq $script:deploymentState) { return $false }
     return $script:deploymentState.CompletedSteps -contains $StepName
 }
 
@@ -281,7 +278,7 @@ function Set-StepCompleted {
         [hashtable]$Details = @{}
     )
     
-    if ($script:deploymentState -eq $null) { return }
+    if ($null -eq $script:deploymentState) { return }
     
     if (!(Test-StepCompleted $StepName)) {
         $script:deploymentState.CompletedSteps += $StepName
@@ -559,6 +556,7 @@ function Install-Python {
 
 function Install-CoreDependencies {
     Write-StepProgress "Installing core dependencies with ARM64 optimizations"
+    $success = $true
     
     if (!$PSCmdlet.ShouldProcess("Core dependencies", "Install")) {
         return $true
@@ -614,6 +612,7 @@ function Install-CoreDependencies {
         return $true
         
     } catch {
+        $success = $false
         Write-ErrorMsg "Failed to install core dependencies: $_"
         return $false
     } finally {
@@ -627,6 +626,7 @@ function Install-CoreDependencies {
 
 function Install-SnapdragonAcceleration {
     Write-StepProgress "Installing Snapdragon NPU acceleration packages"
+    $success = $true
     
     if (Test-StepCompleted "snapdragon_acceleration") {
         Write-Info "Snapdragon acceleration packages already installed"
@@ -715,8 +715,6 @@ function Install-SnapdragonAcceleration {
             Write-Success "$($stage.Name) installed successfully"
             
         } catch {
-            $errorMsg = "Package installation failed: $($stage.Name) - $_"
-            
             if ($stage.Critical) {
                 Write-ErrorMsg "Critical package failed: $($stage.Name)"
                 $success = $false
@@ -799,15 +797,16 @@ print('=== End Verification ===')
 "@
         
         $verificationOutput = $verifyScript | & python 2>&1
-        $verificationOutput | ForEach-Object { $_ = Normalize-VerificationLine $_;
-            if ($_ -match "^\u2713") {
-                Write-Success $_.Replace(([char]0x2713) + " ", "")
-            } elseif ($_ -match "^\u2717") {
-                Write-ErrorMsg $_.Replace(([char]0x2717) + " ", "")
-            } elseif ($_ -match "^!") {
-                Write-WarningMsg $_.Replace("! ", "")
+        $verificationOutput | ForEach-Object { 
+            $line = Format-VerificationLine $_
+            if ($line -match "^\u2713") {
+                Write-Success $line.Replace(([char]0x2713) + " ", "")
+            } elseif ($line -match "^\u2717") {
+                Write-ErrorMsg $line.Replace(([char]0x2717) + " ", "")
+            } elseif ($line -match "^!") {
+                Write-WarningMsg $line.Replace("! ", "")
             } else {
-                Write-Info $_
+                Write-Info $line
             }
         }
         
