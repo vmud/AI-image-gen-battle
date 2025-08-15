@@ -25,6 +25,8 @@
     Skip downloading large model files
 .PARAMETER UseHttpRange
     Enable HTTP range requests for resumable downloads
+.PARAMETER NonInteractive
+    Run in non-interactive mode without prompts (useful for automation)
 #>
 
 # ============================================================================
@@ -61,6 +63,7 @@ param(
     [switch]$Force = $false,
     [switch]$SkipModelDownload = $false,
     [switch]$UseHttpRange = $true,
+    [switch]$NonInteractive = $false,
     [string]$LogPath = "C:\AIDemo\logs",
     [ValidateSet('Speed', 'Balanced', 'Quality')]
     [string]$OptimizationProfile = 'Balanced'
@@ -69,6 +72,18 @@ param(
 # Script configuration
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "Continue"
+
+# Set NonInteractive if running in a non-interactive context
+if (!$script:NonInteractive) {
+    # Auto-detect non-interactive contexts
+    if ($env:GITHUB_ACTIONS -or $env:CI -or $env:TF_BUILD) {
+        $script:NonInteractive = $true
+        Write-Warning "CI/CD environment detected - running in non-interactive mode"
+    } elseif ($Host.Name -eq 'ServerRemoteHost') {
+        $script:NonInteractive = $true
+        Write-Warning "Remote PowerShell session detected - running in non-interactive mode"
+    }
+}
 $script:totalSteps = 25
 $script:currentStep = 0
 $script:issues = @()
@@ -103,6 +118,14 @@ $script:CLIENT_PATH = "$script:DEMO_BASE\client"
 $script:MODELS_PATH = "$script:DEMO_BASE\models"
 $script:CACHE_PATH = "$script:DEMO_BASE\cache"
 $script:TEMP_PATH = "$script:DEMO_BASE\temp"
+
+# Helper function to check if we're in interactive mode
+function Test-InteractiveMode {
+    if ($script:NonInteractive) {
+        return $false
+    }
+    return [Environment]::UserInteractive -and !([Environment]::GetCommandLineArgs() -like '-NonInteractive')
+}
 
 # Color output functions - avoiding conflicts with built-in cmdlets
 function Write-Success { 
@@ -223,8 +246,19 @@ function Initialize-DeploymentState {
                     Write-VerboseInfo "Current:  $($script:machineFingerprint.Hash.Substring(0, 12))..."
                     
                     if (!$Force) {
-                        $continue = Read-Host "Continue with different environment? (Y/N)"
-                        if ($continue -ne 'Y') {
+                        # Check if we're in an interactive session
+                        if (Test-InteractiveMode) {
+                            try {
+                                $continue = Read-Host "Continue with different environment? (Y/N)"
+                                if ($continue -ne 'Y') {
+                                    throw "Environment validation failed. Use -Force to override."
+                                }
+                            } catch {
+                                Write-WarningMsg "Cannot prompt for input. Use -Force to override."
+                                throw "Environment validation failed. Use -Force to override."
+                            }
+                        } else {
+                            Write-WarningMsg "Running in non-interactive mode. Use -Force to override environment check."
                             throw "Environment validation failed. Use -Force to override."
                         }
                     }
@@ -1034,8 +1068,19 @@ function Show-HardwareConfirmation {
     }
     
     if (!$CheckOnly -and !$WhatIf) {
-        $continue = Read-Host "Continue with this configuration? (Y/N)"
-        return $continue -eq 'Y'
+        # Check if we're in an interactive session
+        if (Test-InteractiveMode) {
+            try {
+                $continue = Read-Host "Continue with this configuration? (Y/N)"
+                return $continue -eq 'Y'
+            } catch {
+                Write-WarningMsg "Cannot prompt for input. Auto-continuing..."
+                return $true  # Auto-continue in non-interactive mode
+            }
+        } else {
+            Write-Info "Running in non-interactive mode - auto-continuing with configuration"
+            return $true
+        }
     }
     
     return $true
@@ -1567,10 +1612,20 @@ function Download-IntelModels {
         Write-Host "Storage required: ~8.5 GB"
         Write-Host "============================`n"
         
-        $confirm = Read-Host "Proceed with download? (Y/N)"
-        if ($confirm -ne 'Y') {
-            Write-Info "Model download skipped by user"
-            return $true
+        # Check if we're in an interactive session
+        if (Test-InteractiveMode) {
+            try {
+                $confirm = Read-Host "Proceed with download? (Y/N)"
+                if ($confirm -ne 'Y') {
+                    Write-Info "Model download skipped by user"
+                    return $true
+                }
+            } catch {
+                Write-Info "Cannot prompt for download confirmation. Auto-proceeding..."
+                # Auto-proceed with download in non-interactive mode
+            }
+        } else {
+            Write-Info "Running in non-interactive mode - proceeding with model download"
         }
     }
     
@@ -1836,7 +1891,13 @@ try {
     Write-Host '2. Check DirectML installation' -ForegroundColor White
     Write-Host '3. Verify Python 3.10 is installed' -ForegroundColor White
     Write-Host ''
-    Read-Host 'Press Enter to exit'
+    if (Test-InteractiveMode) {
+        try {
+            Read-Host 'Press Enter to exit'
+        } catch {
+            # Can't read input in non-interactive mode
+        }
+    }
 }
 "@
     
@@ -2390,9 +2451,18 @@ function Main {
         Write-ErrorMsg "Setup failed: $_"
         
         if (!$Force) {
-            $rollback = Read-Host "Do you want to rollback changes? (Y/N)"
-            if ($rollback -eq 'Y') {
-                Invoke-Rollback
+            # Check if we're in an interactive session for rollback prompt
+            if (Test-InteractiveMode) {
+                try {
+                    $rollback = Read-Host "Do you want to rollback changes? (Y/N)"
+                    if ($rollback -eq 'Y') {
+                        Invoke-Rollback
+                    }
+                } catch {
+                    Write-WarningMsg "Cannot prompt for rollback. Skipping rollback."
+                }
+            } else {
+                Write-WarningMsg "Running in non-interactive mode - skipping rollback prompt"
             }
         }
         
