@@ -1,6 +1,6 @@
 # Core Dependencies - All Platforms
 # Generated from pyproject_updated.toml for pip fallback installation
-# Compatible with Python 3.9-3.10
+# Compatible with Python 3.10 ONLY (required for torch-directml)
 
 # === CORE PYTHON PACKAGES ===
 numpy>=1.21.0,<2.0.0

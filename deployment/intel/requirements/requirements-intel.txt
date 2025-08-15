@@ -1,6 +1,7 @@
 # Intel Core Ultra (x86_64) Requirements  
 # DirectML Acceleration Pipeline: PyTorch + DirectML + GPU/iGPU
-# Platform: Windows 10 1903+ or Windows 11 x86_64
+# Platform: Windows 11 x86_64 ONLY (DirectML requires latest drivers)
+# Python: 3.10 ONLY (torch-directml incompatible with 3.11+)
 # Target: 35-45 second generation times with FP16 models
 
 # === INCLUDE CORE DEPENDENCIES ===
