@@ -1251,9 +1251,16 @@ function Install-IntelAcceleration {
     
     $accelerationStages = @(
         @{
+            Name = "PyTorch (CPU base)"
+            Packages = @("torch==2.3.1", "torchvision==0.18.1")
+            IndexUrl = "https://download.pytorch.org/whl/cpu"
+            Critical = $true
+        },
+        @{
             Name = "DirectML (PyTorch)"
             Packages = @("torch-directml")
-            IndexUrl = $null
+            IndexUrl = "https://download.pytorch.org/whl/directml"
+            UseLegacyResolver = $true
             PreRelease = $false
             Critical = $true
         },
