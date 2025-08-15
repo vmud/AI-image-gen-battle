@@ -1252,16 +1252,17 @@ function Install-IntelAcceleration {
     $accelerationStages = @(
         @{
             Name = "PyTorch (CPU base)"
-            Packages = @("torch==2.3.1", "torchvision==0.18.1")
+            Packages = @("torch==2.4.1", "torchvision==0.19.1")
             IndexUrl = "https://download.pytorch.org/whl/cpu"
             Critical = $true
         },
         @{
             Name = "DirectML (PyTorch)"
             Packages = @("torch-directml")
-            IndexUrl = "https://download.pytorch.org/whl/directml"
-            UseLegacyResolver = $true
+            ExtraIndexUrl = "https://download.pytorch.org/whl/directml"
+            UseLegacyResolver = $false
             PreRelease = $false
+            NoUpgrade = $true
             Critical = $true
         },
         @{
@@ -1320,6 +1321,10 @@ function Install-IntelAcceleration {
                     $installArgs += "--index-url"
                     $installArgs += $stage.IndexUrl
                 }
+                if ($stage.ExtraIndexUrl) {
+                    $installArgs += "--extra-index-url"
+                    $installArgs += $stage.ExtraIndexUrl
+                }
                 
                 if ($stage.PreRelease) {
                     $installArgs += "--pre"
@@ -1329,8 +1334,10 @@ function Install-IntelAcceleration {
                     $installArgs += "--use-deprecated=legacy-resolver"
                 }
                 
-                # Add upgrade flag for better compatibility
-                $installArgs += "--upgrade"
+                # Add upgrade flag unless explicitly disabled
+                if (-not $stage.NoUpgrade) {
+                    $installArgs += "--upgrade"
+                }
                 
                 # Remove --quiet to show installation progress
                 Write-VerboseInfo "Running: pip $($installArgs -join ' ')"
