@@ -15,7 +15,8 @@
       "Bash(poetry search:*)",
       "Bash(poetry show:*)",
       "Bash(poetry lock:*)",
-      "Bash(poetry update:*)"
+      "Bash(poetry update:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   },

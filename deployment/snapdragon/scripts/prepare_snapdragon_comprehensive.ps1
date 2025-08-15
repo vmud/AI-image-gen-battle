@@ -65,6 +65,18 @@ This is ONE complete SDXL Lightning model optimized for Snapdragon NPU accelerat
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
+
+# === Encoding-safe symbol helpers ===
+$Script:CheckMark = [char]0x2713  # ✓
+$Script:CrossMark = [char]0x2717  # ✗
+function Normalize-VerificationLine {
+    param([string]$line)
+    if ($null -eq $line) { return $line }
+    $line = $line -replace 'âœ“', ($Script:CheckMark)  # mis-decoded ✓
+    $line = $line -replace 'âœ—', ($Script:CrossMark)  # mis-decoded ✗
+    return $line
+}
+# ====================================
 param(
     [switch]$CheckOnly = $false,
     [switch]$Force = $false,
@@ -787,11 +799,11 @@ print('=== End Verification ===')
 "@
         
         $verificationOutput = $verifyScript | & python 2>&1
-        $verificationOutput | ForEach-Object {
-            if ($_ -match "^✓") {
-                Write-Success $_.Replace("✓ ", "")
-            } elseif ($_ -match "^✗") {
-                Write-ErrorMsg $_.Replace("✗ ", "")
+        $verificationOutput | ForEach-Object { $_ = Normalize-VerificationLine $_;
+            if ($_ -match "^\u2713") {
+                Write-Success $_.Replace(([char]0x2713) + " ", "")
+            } elseif ($_ -match "^\u2717") {
+                Write-ErrorMsg $_.Replace(([char]0x2717) + " ", "")
             } elseif ($_ -match "^!") {
                 Write-WarningMsg $_.Replace("! ", "")
             } else {
