@@ -1087,16 +1087,17 @@ function Install-IntelAcceleration {
     $accelerationStages = @(
         @{
             Name = "PyTorch CPU"
-            Packages = @("torch==2.0.1", "torchvision==0.15.2")
+            Packages = @("torch==2.4.1", "torchvision==0.19.1")
             IndexUrl = "https://download.pytorch.org/whl/cpu"
             Critical = $true
         },
         @{
             Name = "DirectML"
-            Packages = @("torch-directml>=1.12.0")
-            IndexUrl = "https://download.pytorch.org/whl/directml"
-            PreRelease = $true
+            Packages = @("torch-directml")
+            IndexUrl = $null
+            PreRelease = $false
             Critical = $true
+            UseLegacyResolver = $true
         },
         @{
             Name = "ONNX DirectML"
@@ -1145,6 +1146,10 @@ function Install-IntelAcceleration {
                 
                 if ($stage.PreRelease) {
                     $installArgs += "--pre"
+                }
+                
+                if ($stage.UseLegacyResolver) {
+                    $installArgs += "--use-deprecated=legacy-resolver"
                 }
                 
                 # Remove --quiet to show installation errors
