@@ -117,11 +117,13 @@ Write-ColorOutput Yellow "=== Core Application Files ==="
 Copy-WithProgress "$SourceDir\src\windows-client\*.py" "$TargetDir\src\" "Python application files"
 
 # 2. Copy static web assets
-Write-ColorOutput Yellow "`n=== Static Web Assets ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Static Web Assets ==="
 Copy-WithProgress "$SourceDir\src\windows-client\static" "$TargetDir\static" "HTML/JS/CSS files"
 
 # 3. Copy deployment scripts (Platform-specific and common)
-Write-ColorOutput Yellow "`n=== Deployment Scripts ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Deployment Scripts ==="
 Copy-WithProgress "$SourceDir\deployment\common" "$TargetDir\deployment\common" "Common scripts"
 
 if ($detectedPlatform -eq "intel") {
@@ -131,7 +133,8 @@ if ($detectedPlatform -eq "intel") {
 }
 
 # 4. Copy requirements files
-Write-ColorOutput Yellow "`n=== Requirements Files ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Requirements Files ==="
 Copy-WithProgress "$SourceDir\requirements.txt" "$TargetDir\requirements.txt" "Main requirements"
 
 if ($detectedPlatform -eq "intel") {
@@ -141,12 +144,14 @@ if ($detectedPlatform -eq "intel") {
 }
 
 # 5. Copy documentation
-Write-ColorOutput Yellow "`n=== Documentation ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Documentation ==="
 Copy-WithProgress "$SourceDir\docs" "$TargetDir\docs" "Documentation files"
 Copy-WithProgress "$SourceDir\README.md" "$TargetDir\README.md" "README"
 
 # 6. Create necessary empty directories
-Write-ColorOutput Yellow "`n=== Creating Directory Structure ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Creating Directory Structure ==="
 
 if ($detectedPlatform -eq "intel") {
     $modelPath = "$TargetDir\models\stable-diffusion\intel-optimized"
@@ -171,7 +176,8 @@ foreach ($dir in $directories) {
 }
 
 # 7. Create production config file based on platform
-Write-ColorOutput Yellow "`n=== Creating Production Config ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Creating Production Config ==="
 
 if ($detectedPlatform -eq "intel") {
     $configContent = @"
@@ -219,7 +225,8 @@ $configContent | Out-File -FilePath "$TargetDir\config\production.json" -Encodin
 Write-ColorOutput Green "  ✓ Created production config for $detectedPlatform"
 
 # 8. Create launcher scripts
-Write-ColorOutput Yellow "`n=== Creating Launcher Scripts ==="
+Write-ColorOutput Yellow ""
+Write-ColorOutput Yellow "=== Creating Launcher Scripts ==="
 
 # Main launcher
 $launcherContent = @"
