@@ -1105,8 +1105,9 @@ function Install-IntelAcceleration {
         },
         @{
             Name = "Intel Extensions"
-            Packages = @("intel-extension-for-pytorch>=2.0.0")
-            Critical = $true
+            Packages = @("intel_extension_for_pytorch")
+            IndexUrl = "https://pytorch-extension.intel.com/release-whl/stable/cpu/us/"
+            Critical = $false
         },
         @{
             Name = "AI/ML Libraries"

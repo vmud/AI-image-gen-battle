@@ -424,11 +424,13 @@ try {
     
     # Step 4: Install Intel optimizations and remaining dependencies
     Write-FixInfo "Step 4: Installing Intel Extension for PyTorch (CPU optimization)..."
-    & pip install intel-extension-for-pytorch --use-deprecated=legacy-resolver
+    Write-FixInfo "Using Intel's official package repository..."
+    & pip install intel_extension_for_pytorch --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
     if ($LASTEXITCODE -ne 0) {
-        Write-FixWarning "Intel Extension for PyTorch failed (optional)"
+        Write-FixWarning "Intel Extension for PyTorch failed (optional - CPU optimization only)"
+        Write-FixInfo "Note: Intel Extension provides AVX-512 and Intel AMX optimizations for Intel CPUs"
     } else {
-        Write-FixSuccess "Installed Intel Extension for PyTorch"
+        Write-FixSuccess "Installed Intel Extension for PyTorch from Intel's repository"
     }
     
     # Install ONNX Runtime DirectML as backup acceleration method
@@ -520,8 +522,9 @@ try:
     try:
         import intel_extension_for_pytorch as ipex
         print("✓ Intel Extension for PyTorch: Available")
+        print(f"  Version: {ipex.__version__ if hasattr(ipex, '__version__') else 'Unknown'}")
     except ImportError:
-        print("✗ Intel Extension: Not available")
+        print("✗ Intel Extension: Not available (CPU optimizations disabled)")
         
 except Exception as e:
     print(f"✗ PyTorch/DirectML test failed: {e}")

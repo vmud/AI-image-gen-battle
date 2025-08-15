@@ -19,8 +19,9 @@ torch-directml>=1.12.0; sys_platform == "win32" and platform_machine == "AMD64"
 # DirectML ONNX Runtime for additional model support
 onnxruntime-directml>=1.16.0; sys_platform == "win32" and platform_machine == "AMD64"
 
-# Intel-specific PyTorch optimizations
-intel-extension-for-pytorch>=2.0.0; platform_machine == "AMD64"
+# Intel-specific PyTorch optimizations (requires Intel's special repository)
+# Use: pip install intel_extension_for_pytorch --extra-index-url https://pytorch-extension.intel.com/release-whl/stable/cpu/us/
+# intel_extension_for_pytorch; platform_machine == "AMD64"  # Use special installation command above
 
 # === INTEL PERFORMANCE OPTIMIZATIONS ===
 # Additional packages that may improve Intel performance
