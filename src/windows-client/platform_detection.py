@@ -221,5 +221,39 @@ def main():
     
     return detector
 
+def detect_platform() -> Dict[str, Any]:
+    """
+    Standalone function to detect platform - wrapper around PlatformDetector class.
+    This function provides a simple interface for other modules to detect the platform
+    and returns a dictionary with platform information.
+    
+    Returns:
+        Dict containing platform information with keys:
+        - name: Platform name
+        - platform_type: 'intel' or 'snapdragon'
+        - architecture: 'x86_64' or 'ARM64'
+        - acceleration: Available acceleration type
+        - cpu_name: Processor name
+        - npu_available: Boolean for NPU availability
+    """
+    detector = PlatformDetector()
+    platform_info = detector.detect_hardware()
+    optimization_config = detector.get_optimization_config()
+    detector.apply_optimizations()
+    
+    # Return a simplified structure for compatibility
+    return {
+        'name': platform_info.get('processor_model', platform_info.get('platform_type', 'Unknown')),
+        'platform_type': platform_info.get('platform_type', 'unknown'),
+        'architecture': platform_info.get('architecture', 'unknown'),
+        'acceleration': platform_info.get('ai_acceleration', 'CPU'),
+        'cpu_name': platform_info.get('cpu_name', platform_info.get('processor', 'Unknown')),
+        'npu_available': platform_info.get('npu_available', False),
+        'ai_framework': platform_info.get('ai_framework', 'Unknown'),
+        'dedicated_gpu': platform_info.get('dedicated_gpu', False),
+        'optimization_config': optimization_config,
+        'full_platform_info': platform_info
+    }
+
 if __name__ == "__main__":
     main()

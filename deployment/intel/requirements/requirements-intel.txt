@@ -6,6 +6,11 @@
 # === INCLUDE CORE DEPENDENCIES ===
 -r requirements-core.txt
 
+# === PYTORCH COMPATIBILITY (Fixed versions for DirectML compatibility) ===
+# Use PyTorch 2.0.1 for compatibility with torchvision 0.15.2 and DirectML
+torch==2.0.1; sys_platform == "win32" and platform_machine == "AMD64"
+torchvision==0.15.2; sys_platform == "win32" and platform_machine == "AMD64"
+
 # === INTEL DIRECTML ACCELERATION ===
 # DirectML acceleration for PyTorch (requires Windows + DirectX 12)
 torch-directml>=1.12.0; sys_platform == "win32" and platform_machine == "AMD64"

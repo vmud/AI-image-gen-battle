@@ -595,39 +595,42 @@ function Write-StepProgress {
     }
 }
 
-# Progress tracking
-class ProgressReporter {
-    [string]$CurrentOperation
-    [int]$TotalSteps
-    [int]$CurrentStep
-    [datetime]$StartTime
+# Progress tracking functions (replacing class for compatibility)
+function New-ProgressReporter {
+    param([int]$TotalSteps)
     
-    ProgressReporter([int]$totalSteps) {
-        $this.TotalSteps = $totalSteps
-        $this.CurrentStep = 0
-        $this.StartTime = Get-Date
+    return @{
+        CurrentOperation = ""
+        TotalSteps = $TotalSteps
+        CurrentStep = 0
+        StartTime = Get-Date
+    }
+}
+
+function Update-ProgressReporter {
+    param(
+        [hashtable]$Reporter,
+        [string]$Operation
+    )
+    
+    $Reporter.CurrentStep++
+    $Reporter.CurrentOperation = $Operation
+    
+    $percentComplete = ($Reporter.CurrentStep / $Reporter.TotalSteps) * 100
+    $elapsed = (Get-Date) - $Reporter.StartTime
+    $remaining = if ($Reporter.CurrentStep -gt 0) {
+        $avgTime = $elapsed.TotalSeconds / $Reporter.CurrentStep
+        $remainingSteps = $Reporter.TotalSteps - $Reporter.CurrentStep
+        [TimeSpan]::FromSeconds($avgTime * $remainingSteps)
+    } else {
+        [TimeSpan]::Zero
     }
     
-    [void]Update([string]$operation) {
-        $this.CurrentStep++
-        $this.CurrentOperation = $operation
-        
-        $percentComplete = ($this.CurrentStep / $this.TotalSteps) * 100
-        $elapsed = (Get-Date) - $this.StartTime
-        $remaining = if ($this.CurrentStep -gt 0) {
-            $avgTime = $elapsed.TotalSeconds / $this.CurrentStep
-            $remainingSteps = $this.TotalSteps - $this.CurrentStep
-            [TimeSpan]::FromSeconds($avgTime * $remainingSteps)
-        } else {
-            [TimeSpan]::Zero
-        }
-        
-        Write-Progress `
-            -Activity "Intel Setup Progress" `
-            -Status $operation `
-            -PercentComplete $percentComplete `
-            -SecondsRemaining $remaining.TotalSeconds
-    }
+    Write-Progress `
+        -Activity "Intel Setup Progress" `
+        -Status $Operation `
+        -PercentComplete $percentComplete `
+        -SecondsRemaining $remaining.TotalSeconds
 }
 
 # Initialize logging
@@ -1084,13 +1087,13 @@ function Install-IntelAcceleration {
     $accelerationStages = @(
         @{
             Name = "PyTorch CPU"
-            Packages = @("torch>=2.1.0,<2.2.0", "torchvision>=0.16.0,<0.17.0")
+            Packages = @("torch==2.0.1", "torchvision==0.15.2")
             IndexUrl = "https://download.pytorch.org/whl/cpu"
             Critical = $true
         },
         @{
             Name = "DirectML"
-            Packages = @("torch-directml>=1.13.0")
+            Packages = @("torch-directml>=1.12.0")
             IndexUrl = "https://download.pytorch.org/whl/directml"
             PreRelease = $true
             Critical = $true
