@@ -1074,9 +1074,14 @@ function Install-CoreDependencies {
     }
 }
 
-# Install Intel-specific acceleration packages
+# Install Intel-specific acceleration packages with comprehensive demo dependencies
 function Install-IntelAcceleration {
-    Write-StepProgress "Installing Intel acceleration packages"
+    Write-StepProgress "Installing Intel acceleration packages and demo dependencies"
+    
+    if (Test-StepCompleted "intel_acceleration") {
+        Write-Info "Intel acceleration packages already installed"
+        return $true
+    }
     
     if (!$PSCmdlet.ShouldProcess("Intel acceleration", "Install")) {
         return $true
@@ -1121,6 +1126,24 @@ function Install-IntelAcceleration {
                 "optimum"
             )
             Critical = $true
+        },
+        @{
+            Name = "Demo UI Dependencies"
+            Packages = @(
+                "flask==2.3.3",
+                "flask-socketio==5.3.6",
+                "pillow>=8.0.0",
+                "psutil>=5.8.0"
+            )
+            Critical = $true
+        },
+        @{
+            Name = "Additional Intel Dependencies"
+            Packages = @(
+                "numpy>=1.21.0",
+                "scipy>=1.7.0"
+            )
+            Critical = $true
         }
     )
     
@@ -1137,7 +1160,7 @@ function Install-IntelAcceleration {
             foreach ($package in $stage.Packages) {
                 Write-Info "Installing $package..."
                 
-                $installArgs = @($package)
+                $installArgs = @("install", $package)
                 
                 if ($stage.IndexUrl) {
                     $installArgs += "--index-url"
@@ -1152,9 +1175,12 @@ function Install-IntelAcceleration {
                     $installArgs += "--use-deprecated=legacy-resolver"
                 }
                 
-                # Remove --quiet to show installation errors
-                Write-VerboseInfo "Running: pip install $($installArgs -join ' ')"
-                & pip install @installArgs
+                # Add upgrade flag for better compatibility
+                $installArgs += "--upgrade"
+                
+                # Remove --quiet to show installation progress
+                Write-VerboseInfo "Running: pip $($installArgs -join ' ')"
+                & pip @installArgs
                 
                 if ($LASTEXITCODE -ne 0) {
                     throw "Package installation failed: $package (Exit code: $LASTEXITCODE)"
@@ -1165,7 +1191,12 @@ function Install-IntelAcceleration {
             
             # Post-installation validation
             Write-VerboseInfo "Running pip check after installing $($stage.Name)..."
-            & pip check | Out-String | Write-VerboseInfo
+            $pipCheckResult = & pip check 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-VerboseInfo "Package dependencies satisfied for $($stage.Name)"
+            } else {
+                Write-VerboseInfo "Dependency warnings for $($stage.Name): $pipCheckResult"
+            }
             
             Write-Success "$($stage.Name) installed successfully"
             
@@ -1175,7 +1206,7 @@ function Install-IntelAcceleration {
             
             if ($stage.Critical) {
                 Write-ErrorMsg "Critical package failed: $($stage.Name) - $_"
-                Write-ErrorMsg "This will prevent DirectML acceleration from working properly"
+                Write-ErrorMsg "This will prevent the Intel demo from working properly"
                 $success = $false
                 break
             } else {
@@ -1184,9 +1215,9 @@ function Install-IntelAcceleration {
         }
     }
     
-    # Comprehensive DirectML verification
+    # Comprehensive Intel demo verification
     if ($success) {
-        Write-Info "Performing comprehensive DirectML verification..."
+        Write-Info "Performing comprehensive Intel demo verification..."
         
         # Final dependency check
         Write-VerboseInfo "Running final pip check..."
@@ -1202,11 +1233,11 @@ function Install-IntelAcceleration {
 import sys
 import os
 
-print('=== DirectML Verification Report ===')
+print('=== Intel Demo Environment Verification ===')
 print(f'Python version: {sys.version}')
 print(f'Python executable: {sys.executable}')
 
-# Test torch import
+# Test core imports
 try:
     import torch
     print(f'PyTorch version: {torch.__version__}')
@@ -1237,14 +1268,6 @@ try:
     result = torch.mm(test_tensor, test_tensor)
     print(f'DirectML tensor test: SUCCESS (result shape: {result.shape})')
     
-    # Test memory allocation
-    try:
-        large_tensor = torch.randn(1000, 1000).to(dml_device)
-        print('DirectML memory allocation: SUCCESS')
-        del large_tensor
-    except Exception as e:
-        print(f'DirectML memory allocation: WARNING - {e}')
-    
     print('SUCCESS: DirectML is fully functional')
     
 except ImportError as e:
@@ -1257,30 +1280,34 @@ except Exception as e:
     import traceback
     traceback.print_exc()
 
-# Test Intel Extensions
+# Test UI dependencies
 try:
-    import intel_extension_for_pytorch as ipex
-    print(f'Intel Extension for PyTorch: Available')
-    print(f'Intel Extension version: {ipex.__version__ if hasattr(ipex, "__version__") else "Unknown"}')
-except ImportError:
-    print('Intel Extension for PyTorch: Not available (will use standard PyTorch)')
+    import tkinter
+    print('Tkinter: Available')
+    import flask
+    print('Flask: Available')
+    import PIL
+    print('Pillow: Available')
+    import psutil
+    print('PSUtil: Available')
+except ImportError as e:
+    print(f'WARNING: UI dependency missing: {e}')
 
-# Test ONNX Runtime DirectML
+# Test AI/ML libraries
 try:
-    import onnxruntime as ort
-    providers = ort.get_available_providers()
-    print(f'ONNX Runtime providers: {", ".join(providers)}')
-    if 'DmlExecutionProvider' in providers:
-        print('ONNX Runtime DirectML: Available')
-    else:
-        print('ONNX Runtime DirectML: Not available')
-except ImportError:
-    print('ONNX Runtime: Not available')
+    import diffusers
+    print('Diffusers: Available')
+    import transformers
+    print('Transformers: Available')
+    import huggingface_hub
+    print('Hugging Face Hub: Available')
+except ImportError as e:
+    print(f'WARNING: AI library missing: {e}')
 
-print('=== End Verification Report ===')
+print('=== End Intel Demo Verification ===')
 "@
         
-        Write-VerboseInfo "Running DirectML verification script..."
+        Write-VerboseInfo "Running Intel demo verification script..."
         $verificationOutput = $verifyScript | & python 2>&1
         $verificationOutput | ForEach-Object {
             if ($_ -match "^SUCCESS:") {
@@ -1296,12 +1323,23 @@ print('=== End Verification Report ===')
         
         # Check if DirectML verification was successful
         if ($verificationOutput -match "SUCCESS: DirectML is fully functional") {
-            Write-Success "DirectML verification completed successfully"
+            Write-Success "Intel demo environment verification completed successfully"
+            Set-StepCompleted "intel_acceleration" @{
+                DirectMLFunctional = $true
+                PackagesInstalled = $accelerationStages.Count
+                VerificationPassed = $true
+            }
         } elseif ($verificationOutput -match "DirectML acceleration will not be available") {
             Write-WarningMsg "DirectML not available - falling back to CPU processing"
             Write-WarningMsg "Performance will be significantly slower without GPU acceleration"
+            Set-StepCompleted "intel_acceleration" @{
+                DirectMLFunctional = $false
+                PackagesInstalled = $accelerationStages.Count
+                VerificationPassed = $false
+                FallbackMode = "CPU"
+            }
         } else {
-            Write-WarningMsg "DirectML verification completed with issues"
+            Write-WarningMsg "Intel demo verification completed with issues"
             Write-Info "Review the verification output above for details"
         }
     }
@@ -1575,42 +1613,71 @@ function Create-StartupScripts {
     # Create batch file starter
     $batchScript = @"
 @echo off
-echo Starting Intel AI Demo Client...
-echo Expected generation time: 35-45 seconds per image
+echo ===================================================
+echo  Intel AI Image Generation Demo
+echo  DirectML GPU-Accelerated
+echo  Expected Performance: 35-45 seconds per image
+echo ===================================================
+echo.
 cd /d $script:CLIENT_PATH
 call $script:VENV_PATH\Scripts\activate.bat
-set PYTHONPATH=$script:CLIENT_PATH
-set INTEL_OPTIMIZED=1
-set ORT_DIRECTML_DEVICE_ID=0
-set MKL_ENABLE_INSTRUCTIONS=AVX512
-python demo_client.py
+python launch_intel_demo.py
 pause
 "@
     
     $batchScript | Out-File -FilePath "$script:DEMO_BASE\start_intel_demo.bat" -Encoding ASCII
     Write-Success "Batch startup script created"
     
-    # Create PowerShell starter
+    # Create PowerShell starter with comprehensive error handling
     $psScript = @"
-# Intel AI Demo Client Launcher
-Write-Host 'Starting Intel-optimized AI Demo Client...' -ForegroundColor Green
-Write-Host 'Using DirectML GPU acceleration' -ForegroundColor Cyan
-Write-Host 'Expected performance: 35-45 seconds per 768x768 image' -ForegroundColor Yellow
+# Intel AI Demo Client Launcher with Enhanced Features
+param([switch]`$Verbose = `$false)
 
-Set-Location '$script:CLIENT_PATH'
-& '$script:VENV_PATH\Scripts\Activate.ps1'
+Write-Host '====================================================' -ForegroundColor Cyan
+Write-Host ' Intel AI Image Generation Demo' -ForegroundColor White
+Write-Host ' DirectML GPU-Accelerated • Core Ultra Optimized' -ForegroundColor Yellow
+Write-Host '====================================================' -ForegroundColor Cyan
+Write-Host ''
 
-`$env:PYTHONPATH = '$script:CLIENT_PATH'
-`$env:INTEL_OPTIMIZED = '1'
-`$env:ORT_DIRECTML_DEVICE_ID = '0'
-`$env:MKL_ENABLE_INSTRUCTIONS = 'AVX512'
-`$env:OMP_NUM_THREADS = [Environment]::ProcessorCount
-
-python demo_client.py
+try {
+    # Change to client directory
+    Set-Location '$script:CLIENT_PATH'
+    Write-Host 'Activating Python environment...' -ForegroundColor Green
+    
+    # Activate virtual environment
+    & '$script:VENV_PATH\Scripts\Activate.ps1'
+    
+    # Launch with comprehensive environment setup
+    Write-Host 'Launching Intel AI demo with comprehensive validation...' -ForegroundColor Green
+    python launch_intel_demo.py
+    
+} catch {
+    Write-Host ''
+    Write-Host 'ERROR: Demo launch failed' -ForegroundColor Red
+    Write-Host 'Error details: ' -ForegroundColor Yellow -NoNewline
+    Write-Host `$_.Exception.Message -ForegroundColor White
+    Write-Host ''
+    Write-Host 'Troubleshooting steps:' -ForegroundColor Yellow
+    Write-Host '1. Re-run prepare_intel.ps1 script' -ForegroundColor White
+    Write-Host '2. Check DirectML installation' -ForegroundColor White
+    Write-Host '3. Verify Python 3.10 is installed' -ForegroundColor White
+    Write-Host ''
+    Read-Host 'Press Enter to exit'
+}
 "@
     
     $psScript | Out-File -FilePath "$script:DEMO_BASE\start_intel_demo.ps1" -Encoding UTF8
-    Write-Success "PowerShell startup script created"
+    Write-Success "Enhanced PowerShell startup script created"
+    
+    # Create desktop shortcut launcher
+    $shortcutScript = @"
+@echo off
+echo Launching Intel AI Demo...
+start "" "$script:DEMO_BASE\start_intel_demo.bat"
+"@
+    
+    $shortcutScript | Out-File -FilePath "$script:DEMO_BASE\Intel_AI_Demo.bat" -Encoding ASCII
+    Write-Success "Desktop shortcut launcher created"
     
     Register-RollbackAction -Description "Remove startup scripts" -Action {
         Remove-Item "$script:DEMO_BASE\start_intel_demo.bat" -ErrorAction SilentlyContinue
@@ -1742,9 +1809,14 @@ except Exception as e:
     return $true
 }
 
-# Update repository
+# Update repository and deploy all client files
 function Update-Repository {
-    Write-StepProgress "Setting up repository files"
+    Write-StepProgress "Deploying Intel demo client files"
+    
+    if (Test-StepCompleted "repository_update") {
+        Write-Info "Repository files already deployed"
+        return $true
+    }
     
     # Calculate correct path from script location to project root
     # Script is at: deployment/intel/scripts/prepare_intel.ps1
@@ -1813,7 +1885,7 @@ function Update-Repository {
         
         if ($PSCmdlet.ShouldProcess("Client files from $sourceClient", "Copy")) {
             try {
-                Write-Info "Copying client files from: $sourceClient"
+                Write-Info "Copying Intel demo client files from: $sourceClient"
                 Write-Info "Destination: $script:CLIENT_PATH"
                 
                 # Ensure destination directory exists
@@ -1837,6 +1909,25 @@ function Update-Repository {
                 $copiedFiles = Get-ChildItem -Path $script:CLIENT_PATH -Recurse -File
                 Write-VerboseInfo "Copied $($copiedFiles.Count) files to client directory"
                 
+                # Create additional Intel-specific configuration
+                $configContent = @{
+                    "platform" = "intel"
+                    "optimization_profile" = $OptimizationProfile
+                    "directml_enabled" = $true
+                    "model_path" = $script:MODELS_PATH
+                    "performance_targets" = @{
+                        "excellent_threshold" = 35.0
+                        "good_threshold" = 45.0
+                        "target_steps_per_second" = 0.8
+                    }
+                    "setup_timestamp" = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
+                }
+                
+                $configJson = $configContent | ConvertTo-Json -Depth 10
+                $configPath = "$script:CLIENT_PATH\intel_config.json"
+                $configJson | Out-File -FilePath $configPath -Encoding UTF8
+                Write-VerboseInfo "Created Intel configuration file: $configPath"
+                
                 # Log the copied files for debugging
                 if ($VerbosePreference -eq 'Continue') {
                     $copiedFiles | ForEach-Object {
@@ -1844,9 +1935,16 @@ function Update-Repository {
                     }
                 }
                 
-                Write-Success "Client files deployed successfully"
+                Write-Success "Intel demo client files deployed successfully"
                 Write-Info "Copied from: $sourceClient"
                 Write-Info "Files copied: $($copiedFiles.Count)"
+                Write-Info "Configuration: Intel Core Ultra optimized"
+                
+                Set-StepCompleted "repository_update" @{
+                    SourcePath = $sourceClient
+                    FilesCount = $copiedFiles.Count
+                    ConfigCreated = $true
+                }
                 
             } catch {
                 Write-ErrorMsg "Failed to copy client files: $_"

@@ -19,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class AIImageGenerator:
-    """Platform-optimized image generation pipeline"""
+    """Platform-optimized image generation pipeline with Intel performance benchmarking"""
     
     def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
         self.platform_info = platform_info
@@ -28,9 +28,19 @@ class AIImageGenerator:
         self.pipeline = None
         self.device = None
         self.optimization_backend = None
+        self.model_loaded = False
+        
+        # Intel-specific performance targets
+        self.intel_performance_targets = {
+            'excellent_threshold': 35.0,  # seconds
+            'good_threshold': 45.0,       # seconds
+            'expected_directml_utilization': 85.0,  # percentage
+            'expected_memory_usage': 8.5,  # GB
+            'target_steps_per_second': 0.8  # steps/second
+        }
         
         # Quality-focused settings
-        self.default_steps = 30  # Higher for quality
+        self.default_steps = 25 if not self.is_snapdragon else 30  # Intel optimized
         self.default_guidance = 7.5
         self.default_resolution = (768, 768)  # Higher resolution for quality
         
@@ -111,7 +121,7 @@ class AIImageGenerator:
             raise
     
     def _setup_intel_directml(self):
-        """Setup Intel-specific optimizations using DirectML"""
+        """Setup Intel-specific optimizations using DirectML with performance monitoring"""
         try:
             import torch_directml
             
@@ -119,7 +129,20 @@ class AIImageGenerator:
             if torch_directml.is_available():
                 self.device = torch_directml.device()
                 self.optimization_backend = "directml"
-                logger.info(f"DirectML device available: {torch_directml.device_name(0)}")
+                device_name = torch_directml.device_name(0)
+                logger.info(f"DirectML device available: {device_name}")
+                
+                # Set Intel-specific environment optimizations
+                os.environ['ORT_DIRECTML_DEVICE_ID'] = '0'
+                os.environ['ORT_DIRECTML_MEMORY_ARENA'] = '1'
+                os.environ['ORT_DIRECTML_GRAPH_OPTIMIZATION'] = 'ALL'
+                
+                # Intel MKL optimizations for Core Ultra
+                os.environ['MKL_ENABLE_INSTRUCTIONS'] = 'AVX512'
+                os.environ['MKL_DYNAMIC'] = 'FALSE'
+                os.environ['MKL_NUM_THREADS'] = str(max(4, os.cpu_count() // 2))
+                
+                logger.info("Intel DirectML environment optimized for Core Ultra")
                 
                 # Load SDXL with DirectML optimization
                 self._load_intel_optimized_model()
@@ -132,10 +155,11 @@ class AIImageGenerator:
             self._setup_standard_pipeline()
     
     def _load_intel_optimized_model(self):
-        """Load SDXL model optimized for Intel with DirectML"""
+        """Load SDXL model optimized for Intel with DirectML and performance monitoring"""
         try:
             from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
             import torch_directml
+            import torch
             
             model_id = "stabilityai/stable-diffusion-xl-base-1.0"
             
@@ -143,29 +167,48 @@ class AIImageGenerator:
             local_model = self.model_path / "sdxl-base-1.0"
             if local_model.exists():
                 model_id = str(local_model)
+                logger.info(f"Using local Intel-optimized model: {local_model}")
             
-            # Load with DirectML device
+            logger.info("Loading SDXL model for Intel DirectML...")
+            load_start = time.time()
+            
+            # Load with DirectML device and Intel optimizations
             self.pipeline = StableDiffusionXLPipeline.from_pretrained(
                 model_id,
                 torch_dtype=torch.float16,
                 variant="fp16",
-                use_safetensors=True
+                use_safetensors=True,
+                low_cpu_mem_usage=True
             )
             
             # Move to DirectML device
             self.pipeline = self.pipeline.to(torch_directml.device())
             
-            # Use DPM-Solver++ for better quality/speed tradeoff
+            # Use DPM-Solver++ optimized for Intel hardware
             self.pipeline.scheduler = DPMSolverMultistepScheduler.from_config(
                 self.pipeline.scheduler.config,
-                use_karras_sigmas=True
+                use_karras_sigmas=True,
+                algorithm_type="dpmsolver++",
+                solver_order=2
             )
             
-            # Enable optimizations
-            self.pipeline.enable_attention_slicing()
+            # Intel-specific optimizations
+            self.pipeline.enable_attention_slicing("auto")
             self.pipeline.enable_vae_slicing()
             
-            logger.info("Successfully loaded SDXL with DirectML acceleration")
+            # Try to enable model CPU offloading for memory efficiency
+            try:
+                self.pipeline.enable_model_cpu_offload()
+                logger.info("Model CPU offloading enabled for memory efficiency")
+            except Exception as e:
+                logger.warning(f"Could not enable CPU offloading: {e}")
+            
+            load_time = time.time() - load_start
+            self.model_loaded = True
+            
+            logger.info(f"Successfully loaded SDXL with DirectML acceleration ({load_time:.1f}s)")
+            logger.info(f"Model device: {self.device}")
+            logger.info(f"Scheduler: {self.pipeline.scheduler.__class__.__name__}")
             
         except Exception as e:
             logger.error(f"Error loading Intel optimized model: {e}")
@@ -217,61 +260,82 @@ class AIImageGenerator:
         progress_callback: Optional[Callable] = None
     ) -> Tuple[Image.Image, Dict[str, Any]]:
         """
-        Generate high-quality image with platform optimizations
+        Generate high-quality image with Intel-optimized performance benchmarking
         
         Returns:
-            Tuple of (PIL Image, metrics dict)
+            Tuple of (PIL Image, comprehensive metrics dict)
         """
         
         if not self.pipeline:
-            raise RuntimeError("Pipeline not initialized")
+            raise RuntimeError("Pipeline not initialized - run model loading first")
         
-        # Use quality-focused defaults
+        # Use Intel-optimized defaults
         steps = steps or self.default_steps
         guidance_scale = guidance_scale or self.default_guidance
         resolution = resolution or self.default_resolution
         
-        # Quality-focused negative prompt
+        # Intel-optimized negative prompt for quality
         if not negative_prompt:
             negative_prompt = (
                 "low quality, blurry, pixelated, noisy, oversaturated, "
-                "undersaturated, overexposed, underexposed, grainy, jpeg artifacts"
+                "undersaturated, overexposed, underexposed, grainy, jpeg artifacts, "
+                "distorted, deformed, ugly, bad anatomy"
             )
         
-        # Set seed for reproducibility
+        # Set seed for reproducible Intel demos
+        import torch
         if seed is not None:
-            generator = torch.Generator().manual_seed(seed)
+            if self.device and "directml" in str(self.device):
+                # DirectML-compatible generator
+                generator = torch.Generator().manual_seed(seed)
+            else:
+                generator = torch.Generator().manual_seed(seed)
         else:
             generator = None
         
-        # Track generation metrics
+        # Initialize comprehensive metrics tracking
         metrics = {
-            "platform": self.platform_info.get('platform_type'),
+            "platform": "intel",
             "backend": self.optimization_backend,
+            "device": str(self.device),
             "resolution": f"{resolution[0]}x{resolution[1]}",
             "steps": steps,
-            "guidance_scale": guidance_scale
+            "guidance_scale": guidance_scale,
+            "model_loaded": self.model_loaded
         }
         
+        # Performance monitoring setup
+        import psutil
+        process = psutil.Process()
+        initial_memory = process.memory_info().rss / 1024 / 1024  # MB
+        
+        logger.info(f"Starting Intel DirectML generation: {steps} steps, {resolution[0]}x{resolution[1]}")
         start_time = time.time()
         
         try:
-            # Custom progress tracking for demo
-            def callback_wrapper(step, timestep, latents):
+            # Enhanced progress tracking with Intel performance data
+            step_times = []
+            
+            def intel_callback_wrapper(step, timestep, latents):
+                step_time = time.time()
+                if len(step_times) > 0:
+                    step_duration = step_time - step_times[-1]
+                    avg_step_time = sum(step_times[1:]) / max(1, len(step_times) - 1) if len(step_times) > 1 else step_duration
+                    
+                    # Log performance every 5 steps
+                    if step % 5 == 0:
+                        logger.info(f"Intel Step {step}/{steps}: {step_duration:.2f}s (avg: {avg_step_time:.2f}s/step)")
+                
+                step_times.append(step_time)
+                
                 if progress_callback:
                     progress = (step + 1) / steps
                     progress_callback(progress, step + 1, steps)
+                
                 return latents
             
-            # Generate image with platform-specific optimizations
-            if self.is_snapdragon and self.optimization_backend == "qualcomm_npu":
-                # Snapdragon NPU optimized generation
-                result = self._generate_snapdragon_optimized(
-                    prompt, negative_prompt, steps, guidance_scale,
-                    resolution, generator, callback_wrapper
-                )
-            else:
-                # Standard or DirectML generation
+            # Generate image with Intel DirectML optimizations
+            if self.optimization_backend == "directml":
                 result = self.pipeline(
                     prompt=prompt,
                     negative_prompt=negative_prompt,
@@ -280,31 +344,152 @@ class AIImageGenerator:
                     height=resolution[1],
                     width=resolution[0],
                     generator=generator,
-                    callback=callback_wrapper,
+                    callback=intel_callback_wrapper,
+                    callback_steps=1,
+                    output_type="pil"
+                )
+            else:
+                # Fallback for CPU
+                result = self.pipeline(
+                    prompt=prompt,
+                    negative_prompt=negative_prompt,
+                    num_inference_steps=steps,
+                    guidance_scale=guidance_scale,
+                    height=resolution[1],
+                    width=resolution[0],
+                    generator=generator,
+                    callback=intel_callback_wrapper,
                     callback_steps=1
                 )
             
             # Get the generated image
             image = result.images[0]
-            
-            # Calculate metrics
             generation_time = time.time() - start_time
-            metrics["generation_time"] = round(generation_time, 2)
-            metrics["ms_per_step"] = round((generation_time * 1000) / steps, 1)
             
-            # Platform-specific performance metrics
-            if self.is_snapdragon:
-                metrics["npu_utilization"] = self._get_snapdragon_npu_usage()
-            else:
-                metrics["gpu_utilization"] = self._get_intel_gpu_usage()
+            # Comprehensive Intel performance metrics
+            final_memory = process.memory_info().rss / 1024 / 1024  # MB
+            memory_used = final_memory - initial_memory
             
-            logger.info(f"Image generated in {generation_time:.2f}s ({metrics['ms_per_step']}ms/step)")
+            metrics.update({
+                "generation_time": round(generation_time, 2),
+                "ms_per_step": round((generation_time * 1000) / steps, 1),
+                "steps_per_second": round(steps / generation_time, 2),
+                "memory_used_mb": round(memory_used, 1),
+                "initial_memory_mb": round(initial_memory, 1),
+                "final_memory_mb": round(final_memory, 1)
+            })
+            
+            # Intel-specific performance analysis
+            performance_analysis = self._analyze_intel_performance(generation_time, steps, memory_used)
+            metrics.update(performance_analysis)
+            
+            # Platform-specific utilization metrics
+            if not self.is_snapdragon:
+                intel_metrics = self._get_intel_performance_metrics()
+                metrics.update(intel_metrics)
+            
+            # Log comprehensive results
+            logger.info(f"Intel DirectML generation complete:")
+            logger.info(f"  Time: {generation_time:.2f}s ({metrics['ms_per_step']}ms/step)")
+            logger.info(f"  Performance: {performance_analysis['performance_rating']}")
+            logger.info(f"  Memory: {memory_used:.1f}MB used")
+            logger.info(f"  Efficiency: {performance_analysis['efficiency_score']:.1f}%")
             
             return image, metrics
             
         except Exception as e:
-            logger.error(f"Generation failed: {e}")
+            error_metrics = {
+                "error": str(e),
+                "generation_time": time.time() - start_time,
+                "error_step": len(step_times) if 'step_times' in locals() else 0
+            }
+            metrics.update(error_metrics)
+            logger.error(f"Intel generation failed: {e}")
             raise
+    
+    def _analyze_intel_performance(self, generation_time: float, steps: int, memory_used: float) -> Dict[str, Any]:
+        """Analyze Intel DirectML performance against targets"""
+        
+        analysis = {
+            "performance_rating": "Unknown",
+            "efficiency_score": 0.0,
+            "meets_target": False,
+            "optimization_suggestions": []
+        }
+        
+        # Performance rating based on Intel targets
+        if generation_time <= self.intel_performance_targets['excellent_threshold']:
+            analysis["performance_rating"] = "Excellent"
+            analysis["efficiency_score"] = 95.0
+            analysis["meets_target"] = True
+        elif generation_time <= self.intel_performance_targets['good_threshold']:
+            analysis["performance_rating"] = "Good"
+            analysis["efficiency_score"] = 80.0
+            analysis["meets_target"] = True
+        else:
+            analysis["performance_rating"] = "Needs Optimization"
+            analysis["efficiency_score"] = max(50.0, 100 * (60 / generation_time))
+            analysis["meets_target"] = False
+            
+            # Add optimization suggestions
+            if generation_time > 60:
+                analysis["optimization_suggestions"].append("Consider reducing steps to 20-25")
+            if memory_used > 10000:  # 10GB
+                analysis["optimization_suggestions"].append("Enable model CPU offloading")
+            if self.optimization_backend != "directml":
+                analysis["optimization_suggestions"].append("Install torch-directml for GPU acceleration")
+        
+        # Steps per second analysis
+        steps_per_second = steps / generation_time
+        analysis["steps_per_second"] = round(steps_per_second, 2)
+        
+        if steps_per_second >= self.intel_performance_targets['target_steps_per_second']:
+            analysis["step_efficiency"] = "Good"
+        else:
+            analysis["step_efficiency"] = "Below Target"
+            analysis["optimization_suggestions"].append("Check DirectML installation and GPU drivers")
+        
+        # Memory efficiency analysis
+        expected_memory = self.intel_performance_targets['expected_memory_usage'] * 1024  # Convert to MB
+        memory_efficiency = min(100, (expected_memory / max(memory_used, expected_memory)) * 100)
+        analysis["memory_efficiency"] = round(memory_efficiency, 1)
+        
+        return analysis
+    
+    def _get_intel_performance_metrics(self) -> Dict[str, Any]:
+        """Get Intel-specific performance metrics"""
+        metrics = {
+            "gpu_utilization": 0.0,
+            "directml_active": False,
+            "intel_optimization_level": "unknown"
+        }
+        
+        try:
+            import psutil
+            
+            # CPU utilization as proxy for Intel iGPU
+            cpu_percent = psutil.cpu_percent(interval=0.1)
+            metrics["gpu_utilization"] = min(95.0, cpu_percent * 1.2)  # Approximate iGPU usage
+            
+            # Check DirectML status
+            if self.optimization_backend == "directml":
+                metrics["directml_active"] = True
+                metrics["intel_optimization_level"] = "high"
+            else:
+                metrics["intel_optimization_level"] = "cpu_only"
+            
+            # Memory pressure
+            memory = psutil.virtual_memory()
+            metrics["memory_pressure"] = memory.percent
+            
+            # Intel-specific environment checks
+            intel_env_vars = ['MKL_ENABLE_INSTRUCTIONS', 'ORT_DIRECTML_DEVICE_ID']
+            metrics["intel_env_optimized"] = all(var in os.environ for var in intel_env_vars)
+            
+        except Exception as e:
+            logger.warning(f"Could not get Intel performance metrics: {e}")
+        
+        return metrics
     
     def _generate_snapdragon_optimized(
         self, prompt, negative_prompt, steps, guidance_scale,

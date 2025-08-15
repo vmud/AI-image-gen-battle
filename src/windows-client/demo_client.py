@@ -45,11 +45,18 @@ class DemoDisplay:
         self.generation_metrics = None
         self.ai_generator = None  # Will be initialized on first use
         
+        # Environment validation
+        self.validation_results = None
+        self.environment_validator = None
+        
         # Performance metrics
         self.cpu_usage = 0
         self.memory_usage = 0
         self.power_consumption = 0
         self.npu_usage = 0 if self.is_snapdragon else None
+        
+        # Setup logging
+        self.logger = logging.getLogger(__name__)
         
         # UI setup
         self.setup_ui()
@@ -74,6 +81,36 @@ class DemoDisplay:
         
         self.create_header()
         self.create_content_area()
+        self.create_status_bar()
+        
+    def create_status_bar(self):
+        """Create bottom status bar with environment readiness indicator."""
+        self.status_bar = tk.Frame(self.main_frame, bg='#1a1a2e', height=50, relief='raised', bd=1)
+        self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        self.status_bar.pack_propagate(False)
+        
+        # Environment status indicator
+        self.env_status_label = tk.Label(
+            self.status_bar,
+            text="🟡 Checking Environment...",
+            font=('Segoe UI', 14, 'bold'),
+            fg='#ffa500',
+            bg='#1a1a2e'
+        )
+        self.env_status_label.pack(side=tk.LEFT, padx=20, pady=10)
+        
+        # System info display
+        self.system_info_label = tk.Label(
+            self.status_bar,
+            text=f"Intel Core Ultra | DirectML Ready | Models: Loading...",
+            font=('Segoe UI', 10),
+            fg='#cccccc',
+            bg='#1a1a2e'
+        )
+        self.system_info_label.pack(side=tk.RIGHT, padx=20, pady=15)
+        
+        # Start environment validation
+        self.validate_environment()
         
     def create_header(self):
         """Create the header with platform branding and status."""
@@ -295,7 +332,7 @@ class DemoDisplay:
         
         # Prompt display
         self.prompt_frame = tk.Frame(self.metrics_frame, bg='#2a2a4e', relief='raised', bd=2)
-        self.prompt_frame.pack(fill=tk.X)
+        self.prompt_frame.pack(fill=tk.X, pady=(0, 20))
         
         tk.Label(
             self.prompt_frame,
@@ -315,6 +352,70 @@ class DemoDisplay:
             justify=tk.CENTER
         )
         self.prompt_label.pack(pady=(0, 15))
+        
+        # Local Test Button
+        self.test_button_frame = tk.Frame(self.metrics_frame, bg='#2a2a3e', relief='raised', bd=2)
+        self.test_button_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        tk.Label(
+            self.test_button_frame,
+            text="🧪 LOCAL TESTING",
+            font=('Segoe UI', 12, 'bold'),
+            fg='#00ff88' if self.is_snapdragon else '#ffa500',
+            bg='#2a2a3e'
+        ).pack(pady=(15, 5))
+        
+        self.test_button = tk.Button(
+            self.test_button_frame,
+            text="Test Local Generation",
+            font=('Segoe UI', 11, 'bold'),
+            bg='#00ff88' if self.is_snapdragon else '#ffa500',
+            fg='black',
+            activebackground='#00cc66' if self.is_snapdragon else '#cc8500',
+            command=self.open_test_dialog,
+            relief='raised',
+            bd=2
+        )
+        self.test_button.pack(pady=(0, 15), padx=20, fill=tk.X)
+        
+        # Performance Comparison Frame
+        self.perf_frame = tk.Frame(self.metrics_frame, bg='#2a2a5e', relief='raised', bd=2)
+        self.perf_frame.pack(fill=tk.X)
+        
+        tk.Label(
+            self.perf_frame,
+            text="📊 PERFORMANCE",
+            font=('Segoe UI', 12, 'bold'),
+            fg='#66ccff' if not self.is_snapdragon else '#ff99cc',
+            bg='#2a2a5e'
+        ).pack(pady=(15, 5))
+        
+        self.perf_actual = tk.Label(
+            self.perf_frame,
+            text="Actual: --",
+            font=('Segoe UI', 10),
+            fg='white',
+            bg='#2a2a5e'
+        )
+        self.perf_actual.pack()
+        
+        self.perf_expected = tk.Label(
+            self.perf_frame,
+            text="Expected: 35-45s",
+            font=('Segoe UI', 10),
+            fg='#cccccc',
+            bg='#2a2a5e'
+        )
+        self.perf_expected.pack()
+        
+        self.perf_status = tk.Label(
+            self.perf_frame,
+            text="🟡 Ready to test",
+            font=('Segoe UI', 10, 'bold'),
+            fg='#ffa500',
+            bg='#2a2a5e'
+        )
+        self.perf_status.pack(pady=(5, 15))
         
     def setup_monitoring(self):
         """Setup performance monitoring."""
@@ -394,7 +495,7 @@ class DemoDisplay:
         self.image_status.config(text=f"Generating: {prompt}\nProcessing with {'NPU' if self.is_snapdragon else 'CPU + iGPU'}")
         
         # Wait for sync time if specified
-        if sync_time:
+        if sync_time is not None:
             wait_time = sync_time - time.time()
             if wait_time > 0:
                 time.sleep(wait_time)
@@ -426,7 +527,10 @@ class DemoDisplay:
             # Quality-focused settings based on platform
             if self.is_snapdragon:
                 # Snapdragon with optimized models can do high quality faster
-                steps = 4 if "lightning" in str(self.ai_generator.model_path) else 30
+                if self.ai_generator and hasattr(self.ai_generator, 'model_path'):
+                    steps = 4 if "lightning" in str(self.ai_generator.model_path) else 30
+                else:
+                    steps = 30
                 resolution = (768, 768)  # Higher resolution for quality
             else:
                 # Intel with DirectML - balance quality and speed
@@ -438,14 +542,17 @@ class DemoDisplay:
             # Generate the image
             self.root.after_idle(lambda: self.status_label.config(text="Generating...", fg='yellow'))
             
-            image, metrics = self.ai_generator.generate_image(
-                prompt=self.current_prompt,
-                steps=steps,
-                resolution=resolution,
-                guidance_scale=7.5,  # Higher for quality
-                seed=42,  # Fixed seed for reproducible demos
-                progress_callback=progress_callback
-            )
+            if self.ai_generator:
+                image, metrics = self.ai_generator.generate_image(
+                    prompt=self.current_prompt,
+                    steps=steps,
+                    resolution=resolution,
+                    guidance_scale=7.5,  # Higher for quality
+                    seed=42,  # Fixed seed for reproducible demos
+                    progress_callback=progress_callback
+                )
+            else:
+                raise RuntimeError("AI generator not initialized")
             
             # Store the generated image and metrics
             self.generated_image = image
@@ -473,11 +580,17 @@ class DemoDisplay:
         
     def generation_complete(self):
         """Handle generation completion."""
-        elapsed_time = self.end_time - self.start_time
+        if self.end_time is not None and self.start_time is not None:
+            elapsed_time = self.end_time - self.start_time
+        else:
+            elapsed_time = 0.0
         
         # Update status
         self.status_label.config(text="✅ COMPLETE!", fg='#00ff88')
         self.time_value.config(text=f"{elapsed_time:.1f}")
+        
+        # Update performance comparison
+        self.update_performance_comparison(elapsed_time)
         
         # Display the generated image
         if hasattr(self, 'generated_image') and self.generated_image:
@@ -487,12 +600,20 @@ class DemoDisplay:
             resized_image = self.generated_image.resize(display_size, Image.Resampling.LANCZOS)
             photo = ImageTk.PhotoImage(resized_image)
             
-            # Update the image display
-            self.image_label.config(image=photo)
-            self.image_label.image = photo  # Keep reference
+            # Clear the image canvas and add the image
+            self.image_canvas.delete("all")
+            canvas_width = self.image_canvas.winfo_width()
+            canvas_height = self.image_canvas.winfo_height()
+            
+            # Center the image
+            x = canvas_width // 2
+            y = canvas_height // 2
+            
+            self.image_canvas.create_image(x, y, image=photo, anchor='center')
+            self.current_photo = photo  # Keep reference to prevent garbage collection
         
         # Update image display with metrics
-        if hasattr(self, 'generation_metrics'):
+        if hasattr(self, 'generation_metrics') and self.generation_metrics is not None:
             metrics_text = (
                 f"✅ Generation Complete!\n"
                 f"Time: {elapsed_time:.1f}s\n"
@@ -503,16 +624,16 @@ class DemoDisplay:
             if self.is_snapdragon:
                 metrics_text += f"NPU Usage: {self.generation_metrics.get('npu_utilization', 0):.1f}%"
             else:
-                metrics_text += f"GPU Usage: {self.generation_metrics.get('gpu_utilization', 0):.1f}%"
+                metrics_text += f"DirectML Usage: {self.generation_metrics.get('gpu_utilization', 0):.1f}%"
         else:
             metrics_text = f"✅ Complete in {elapsed_time:.1f}s"
         
         self.image_status.config(
-            text=f"🏙️ Generated Image:\n\"{self.current_prompt}\"\n\nComplete AI-generated artwork\npowered by {'Snapdragon NPU' if self.is_snapdragon else 'Intel CPU + iGPU'}"
+            text=f"🖼️ Generated Image:\n\"{self.current_prompt}\"\n\nAI-generated artwork\npowered by {'Snapdragon NPU' if self.is_snapdragon else 'Intel DirectML'}"
         )
         
         # Change image background to indicate completion
-        self.image_canvas.config(bg='#4a4a8a' if self.is_snapdragon else '#4a4a6a')
+        self.image_canvas.config(bg='#2a4a2a' if elapsed_time <= 35 else '#4a4a2a' if elapsed_time <= 45 else '#4a2a2a')
         
     def generation_error(self, error: str):
         """Handle generation error."""
@@ -537,8 +658,8 @@ class DemoDisplay:
                 
         return {
             'status': 'active' if self.demo_active else 'idle',
-            'ready': True,
-            'model_loaded': True,
+            'ready': self.validation_results.get("overall_ready", False) if self.validation_results else False,
+            'model_loaded': self.ai_generator is not None,
             'current_step': self.current_step,
             'total_steps': self.total_steps,
             'elapsed_time': elapsed_time,
@@ -551,6 +672,227 @@ class DemoDisplay:
             'npu_usage': self.npu_usage
         }
         
+    def validate_environment(self):
+        """Validate that the environment is ready for demo using comprehensive validator."""
+        def check_environment():
+            try:
+                # Update status to show validation in progress
+                self.root.after_idle(lambda: self.env_status_label.config(
+                    text="🟡 Validating Environment...", fg='#ffa500'
+                ))
+                
+                # Use comprehensive environment validator
+                from environment_validator import IntelEnvironmentValidator
+                
+                validator = IntelEnvironmentValidator()
+                validation_results = validator.validate_all()
+                
+                # Get readiness status
+                icon, status, message = validator.get_readiness_status()
+                
+                # Update UI based on validation results
+                self.root.after_idle(lambda: self.update_environment_status(
+                    icon, status, message, validation_results
+                ))
+                
+                # Store validation results for later use
+                self.validation_results = validation_results
+                self.environment_validator = validator
+                
+                # Initialize AI pipeline if environment is ready
+                if validation_results["overall_ready"]:
+                    self.root.after_idle(lambda: self.env_status_label.config(
+                        text="🟡 Loading AI Models...", fg='#ffa500'
+                    ))
+                    
+                    try:
+                        from ai_pipeline import AIImageGenerator
+                        self.ai_generator = AIImageGenerator(self.platform_info)
+                        self.root.after_idle(self.environment_ready)
+                    except Exception as e:
+                        self.root.after_idle(lambda: self.env_status_label.config(
+                            text=f"🔴 Model Loading Failed", fg='red'
+                        ))
+                
+            except Exception as e:
+                self.logger.error(f"Environment validation failed: {e}")
+                self.root.after_idle(lambda: self.env_status_label.config(
+                    text=f"🔴 Validation Error", fg='red'
+                ))
+        
+        # Run validation in separate thread
+        validation_thread = threading.Thread(target=check_environment, daemon=True)
+        validation_thread.start()
+    
+    def update_environment_status(self, icon: str, status: str, message: str, results: Dict[str, Any]):
+        """Update environment status display with validation results."""
+        
+        # Update main status label
+        color = '#00ff88' if icon == '🟢' else '#ffa500' if icon == '🟡' else 'red'
+        self.env_status_label.config(text=f"{icon} {status}", fg=color)
+        
+        # Update system info with detailed status
+        if results["overall_ready"]:
+            directml_status = results["details"].get("DirectML Availability", {})
+            if directml_status.get("status"):
+                self.system_info_label.config(text="Intel Core Ultra | DirectML Active | Environment: Ready")
+            else:
+                self.system_info_label.config(text="Intel Core Ultra | CPU Fallback | Environment: Ready")
+        else:
+            error_count = results.get("error_count", 0)
+            warning_count = results.get("warning_count", 0)
+            status_text = f"Intel Core Ultra | Issues: {error_count} errors, {warning_count} warnings"
+            self.system_info_label.config(text=status_text)
+        
+        # Log detailed results
+        self.logger.info(f"Environment validation: {results['checks_passed']}/{results['total_checks']} checks passed")
+        if results.get("error_count", 0) > 0:
+            self.logger.warning(f"Critical issues detected: {results['error_count']}")
+        
+    def environment_ready(self):
+        """Called when environment validation is complete and models are loaded."""
+        self.env_status_label.config(text="🟢 ENVIRONMENT READY", fg='#00ff88')
+        
+        # Get performance expectations from validator
+        if hasattr(self, 'environment_validator') and self.environment_validator is not None:
+            expectations = self.environment_validator.get_performance_expectations()
+            self.perf_expected.config(text=f"Expected: {expectations['expected_time_range']}")
+            
+            # Update system info with acceleration details
+            accel_type = expectations.get('acceleration', 'Unknown')
+            self.system_info_label.config(text=f"Intel Core Ultra | {accel_type} | Models: Ready")
+        else:
+            # Fallback if validator not available
+            self.system_info_label.config(text="Intel Core Ultra | Models: Ready")
+        
+    def update_performance_comparison(self, actual_time):
+        """Update performance comparison display."""
+        self.perf_actual.config(text=f"Actual: {actual_time:.1f}s")
+        
+        if actual_time <= 35:
+            self.perf_status.config(text="🟢 Excellent!", fg='#00ff88')
+        elif actual_time <= 45:
+            self.perf_status.config(text="🟡 Good", fg='#ffa500')
+        else:
+            self.perf_status.config(text="🔴 Needs Optimization", fg='#ff6b6b')
+            
+    def open_test_dialog(self):
+        """Open local prompt testing dialog."""
+        if self.demo_active:
+            messagebox.showwarning("Demo Active", "Please wait for current generation to complete.")
+            return
+        
+        # Create test dialog window
+        test_window = tk.Toplevel(self.root)
+        test_window.title("Local Image Generation Test")
+        test_window.geometry("500x400")
+        test_window.configure(bg='#2a2a3e')
+        test_window.transient(self.root)
+        test_window.grab_set()
+        
+        # Center the dialog
+        test_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 50,
+            self.root.winfo_rooty() + 50
+        ))
+        
+        # Title
+        tk.Label(
+            test_window,
+            text="🧪 Local Generation Test",
+            font=('Segoe UI', 16, 'bold'),
+            fg='#ffa500',
+            bg='#2a2a3e'
+        ).pack(pady=20)
+        
+        # Prompt input
+        tk.Label(
+            test_window,
+            text="Enter your prompt:",
+            font=('Segoe UI', 12),
+            fg='white',
+            bg='#2a2a3e'
+        ).pack(pady=(0, 10))
+        
+        prompt_text = tk.Text(
+            test_window,
+            height=4,
+            width=50,
+            font=('Segoe UI', 10),
+            bg='#3a3a4e',
+            fg='white',
+            insertbackground='white',
+            wrap=tk.WORD
+        )
+        prompt_text.pack(pady=(0, 10), padx=20)
+        
+        # Insert sample prompts
+        sample_prompts = [
+            "A serene mountain landscape at sunset with golden light",
+            "A futuristic city skyline with flying cars",
+            "A peaceful forest path with sunlight filtering through trees"
+        ]
+        
+        tk.Label(
+            test_window,
+            text="Sample prompts:",
+            font=('Segoe UI', 10, 'bold'),
+            fg='#cccccc',
+            bg='#2a2a3e'
+        ).pack(pady=(10, 5))
+        
+        for i, prompt in enumerate(sample_prompts, 1):
+            sample_btn = tk.Button(
+                test_window,
+                text=f"{i}. {prompt[:40]}...",
+                font=('Segoe UI', 9),
+                bg='#4a4a5e',
+                fg='white',
+                activebackground='#5a5a6e',
+                command=lambda p=prompt: (prompt_text.delete(1.0, tk.END), prompt_text.insert(1.0, p)),
+                relief='flat'
+            )
+            sample_btn.pack(pady=2, padx=40, fill=tk.X)
+        
+        # Buttons frame
+        btn_frame = tk.Frame(test_window, bg='#2a2a3e')
+        btn_frame.pack(pady=20)
+        
+        def start_test():
+            prompt = prompt_text.get(1.0, tk.END).strip()
+            if prompt:
+                test_window.destroy()
+                self.start_generation(prompt, steps=25)
+            else:
+                messagebox.showwarning("Empty Prompt", "Please enter a prompt or select a sample.")
+        
+        tk.Button(
+            btn_frame,
+            text="Generate Image",
+            font=('Segoe UI', 12, 'bold'),
+            bg='#00cc66',
+            fg='black',
+            command=start_test,
+            relief='raised',
+            bd=2,
+            padx=20
+        ).pack(side=tk.LEFT, padx=10)
+        
+        tk.Button(
+            btn_frame,
+            text="Cancel",
+            font=('Segoe UI', 12),
+            bg='#666',
+            fg='white',
+            command=test_window.destroy,
+            relief='raised',
+            bd=2,
+            padx=20
+        ).pack(side=tk.LEFT, padx=10)
+        
+        # Focus on prompt text
+        prompt_text.focus_set()
+    
     def run(self):
         """Run the demo display."""
         self.root.mainloop()
