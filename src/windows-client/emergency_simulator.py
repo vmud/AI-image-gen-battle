@@ -171,6 +171,12 @@ class EmergencyImageGenerator:
         """Select random emergency image from available assets"""
         platform = self.platform_info.get('platform_type', 'generic')
         
+        # DIAGNOSTIC: Log emergency image selection process
+        logger.info(f"[EMERGENCY DIAG] Selecting emergency image for prompt: '{prompt}'")
+        logger.info(f"[EMERGENCY DIAG] Platform: {platform}")
+        logger.info(f"[EMERGENCY DIAG] Emergency assets directory: {self.emergency_assets_dir}")
+        logger.info(f"[EMERGENCY DIAG] Assets directory exists: {self.emergency_assets_dir.exists()}")
+        
         # Get all available emergency images for this platform
         available_images = []
         categories = list(self.prompt_categories.keys())
@@ -182,9 +188,11 @@ class EmergencyImageGenerator:
                 if image_path.exists():
                     available_images.append(image_path)
         
+        logger.info(f"[EMERGENCY DIAG] Found {len(available_images)} existing emergency images")
+        
         # If no images exist yet, create them first
         if not available_images:
-            logger.info("No emergency images found, creating initial set...")
+            logger.info("[EMERGENCY DIAG] No emergency images found, creating initial set...")
             self.ensure_emergency_assets()
             # Re-scan for created images
             for category in categories:
@@ -193,17 +201,22 @@ class EmergencyImageGenerator:
                     image_path = self.emergency_assets_dir / filename
                     if image_path.exists():
                         available_images.append(image_path)
+            logger.info(f"[EMERGENCY DIAG] After creation, found {len(available_images)} emergency images")
         
         # Select random image from available ones
         if available_images:
             selected_image = random.choice(available_images)
-            logger.info(f"Randomly selected emergency image: {selected_image.name}")
+            logger.info(f"[EMERGENCY DIAG] Selected emergency image: {selected_image.name}")
+            logger.info(f"[EMERGENCY DIAG] Image file exists: {selected_image.exists()}")
+            logger.info(f"[EMERGENCY DIAG] Image file size: {selected_image.stat().st_size if selected_image.exists() else 'N/A'} bytes")
             return selected_image
         
         # Ultimate fallback - create abstract image
         fallback_filename = f"emergency_abstract_0_{platform}.png"
         fallback_path = self.emergency_assets_dir / fallback_filename
+        logger.info(f"[EMERGENCY DIAG] Using fallback image: {fallback_path}")
         if not fallback_path.exists():
+            logger.info("[EMERGENCY DIAG] Creating fallback image...")
             self.create_placeholder_image(fallback_path, 'abstract', 0)
         
         return fallback_path

@@ -221,9 +221,16 @@ class EmergencyWebServer:
     def run_generation(self):
         """Run the actual image generation using AI pipeline."""
         try:
+            # DIAGNOSTIC: Check emergency mode status
+            self.logger.info(f"[EMERGENCY DIAG] Starting generation for prompt: '{self.current_prompt}'")
+            self.logger.info(f"[EMERGENCY DIAG] Emergency mode environment: {os.environ.get('EMERGENCY_MODE', 'NOT_SET')}")
+            self.logger.info(f"[EMERGENCY DIAG] Platform info: {self.platform_info}")
+            
             # Initialize AI pipeline if not already done
             if not hasattr(self, 'ai_generator') or self.ai_generator is None:
+                self.logger.info("[EMERGENCY DIAG] Initializing AI generator...")
                 self.ai_generator = AIImageGenerator(self.platform_info)
+                self.logger.info(f"[EMERGENCY DIAG] AI generator initialized: {type(self.ai_generator)}")
             
             # Progress callback for real-time updates
             def progress_callback(progress, current_step, total_steps):
@@ -412,6 +419,12 @@ class EmergencyWebServer:
         def serve_generated_image(filename):
             """Serve generated images."""
             return send_from_directory(str(self.generated_images_dir), filename)
+        
+        @self.app.route('/static/emergency_assets/<path:filename>')
+        def serve_emergency_assets(filename):
+            """Serve emergency asset images."""
+            emergency_assets_dir = Path("static/emergency_assets")
+            return send_from_directory(str(emergency_assets_dir), filename)
         
         @self.app.route('/health', methods=['GET'])
         def health_check():
