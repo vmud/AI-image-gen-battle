@@ -28,9 +28,11 @@ class PlatformDetector:
         
         # Detect CPU architecture (allow environment override for Snapdragon)
         force_snap = os.getenv('SNAPDRAGON_NPU', '').lower() in ('1', 'true', 'yes', 'y')
+        print(f"[DEBUG] Platform Detection: SNAPDRAGON_NPU='{os.getenv('SNAPDRAGON_NPU', 'NOT_SET')}', force_snap={force_snap}")
         if force_snap:
             self.platform_info['architecture'] = 'ARM64'
             self.platform_info['platform_type'] = 'snapdragon'
+            print(f"[DEBUG] Platform forced to Snapdragon due to SNAPDRAGON_NPU environment variable")
         elif 'ARM' in platform.machine().upper() or 'ARM64' in platform.machine().upper():
             self.platform_info['architecture'] = 'ARM64'
             self.platform_info['platform_type'] = 'snapdragon'

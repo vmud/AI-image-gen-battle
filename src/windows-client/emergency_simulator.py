@@ -396,8 +396,11 @@ class EmergencyModeActivator:
         activation_triggers = []
         
         # Environment variable override
-        if os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes'):
+        emergency_env = os.environ.get('EMERGENCY_MODE', '')
+        print(f"[DEBUG] Emergency Mode Check: EMERGENCY_MODE='{emergency_env}'")
+        if emergency_env.lower() in ('true', '1', 'yes'):
             activation_triggers.append("Manual override via EMERGENCY_MODE environment variable")
+            print(f"[DEBUG] Emergency mode ACTIVATED via environment variable")
         
         # Model loading failures
         if error and any(keyword in str(error).lower() for keyword in 

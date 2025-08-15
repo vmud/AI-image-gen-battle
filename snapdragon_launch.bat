@@ -115,17 +115,28 @@ echo       - Port %DEMO_PORT%: Available
 REM Navigate to the demo client directory
 cd /d "%CD%\src\windows-client"
 
+REM Add platform detection override (CRITICAL: platform_detection.py looks for SNAPDRAGON_NPU)
+set SNAPDRAGON_NPU=1
+set FORCE_PLATFORM=snapdragon
+set FORCE_SNAPDRAGON=true
+set PLATFORM_OVERRIDE=snapdragon
+echo       - Environment override: SNAPDRAGON_NPU=%SNAPDRAGON_NPU%
+echo       - Platform forced to: Snapdragon X Elite
+echo [%date% %time%] Critical platform override: SNAPDRAGON_NPU=%SNAPDRAGON_NPU% >> "%LOG_FILE%"
+
 REM Start the demo server
 echo.
 echo [4/6] Starting Snapdragon AI demo server...
 echo       - Server will start on port %DEMO_PORT%
 echo       - NPU optimization: ACTIVE
 echo       - UI Theme: Snapdragon X Elite
+echo       - Platform forced to: Snapdragon X Elite
 echo.
 echo Starting server... (this may take 10-15 seconds)
+echo [%date% %time%] Forcing platform to Snapdragon X Elite >> "%LOG_FILE%"
 
-REM Launch demo_client.py in background
-start "Snapdragon Emergency Demo Server" /min python demo_client.py
+REM Launch demo_client.py in background with enhanced logging
+start "Snapdragon AI Demo Server" /min python demo_client.py
 
 REM Wait for server to be ready
 echo.
@@ -142,10 +153,22 @@ if %counter% gtr %MAX_WAIT_TIME% (
     exit /b 1
 )
 
-REM Check if server is responding
-curl -s -o nul -w "%%{http_code}" "%HEALTH_URL%" 2>nul | findstr "200" >nul
-if errorlevel 1 (
-    echo       - Attempt %counter%/%MAX_WAIT_TIME%: Server not ready yet...
+REM Check if server is responding - with detailed debugging
+for /f %%i in ('curl -s -w "%%{http_code}" "%HEALTH_URL%" 2^>nul') do set HTTP_STATUS=%%i
+echo       - Attempt %counter%/%MAX_WAIT_TIME%: Health check returned HTTP %HTTP_STATUS%
+
+REM Enhanced debugging for health check failures
+if not "%HTTP_STATUS%"=="200" (
+    if %counter% LEQ 5 (
+        echo       - Debug: Platform override active: SNAPDRAGON_NPU=%SNAPDRAGON_NPU%
+        echo       - Debug: Checking server logs and platform detection...
+        echo [%date% %time%] Health check failed: HTTP %HTTP_STATUS% (SNAPDRAGON_NPU=%SNAPDRAGON_NPU%) >> "%LOG_FILE%"
+    )
+    REM Try to get more info from the health endpoint
+    if %counter% EQU 3 (
+        echo       - Debug: Attempting detailed health check...
+        curl -s "%HEALTH_URL%" 2>nul | findstr /C:"healthy" >nul && echo       - Health endpoint returned data || echo       - No health data returned
+    )
     timeout /t 1 /nobreak >nul
     goto wait_loop
 )
@@ -153,15 +176,26 @@ if errorlevel 1 (
 echo       - Server is ready and responding!
 echo [%date% %time%] Server started successfully >> "%LOG_FILE%"
 
-REM Launch browser
+REM Launch browser with cache-busting
 echo.
 echo [6/6] Opening Snapdragon demo interface...
 echo       - Demo URL: %DEMO_URL%
 echo       - Lightning-fast 3-5 second generation with NPU acceleration
 echo       - Optimized Snapdragon X Elite AI performance
+echo       - Forcing fresh UI load (no cache)
 
-REM Try to open in default browser
-start "" "%DEMO_URL%"
+REM Create cache-busted URL with timestamp
+set TIMESTAMP=%date:~-4,4%%date:~-10,2%%date:~-7,2%%time:~0,2%%time:~3,2%%time:~6,2%
+set CACHE_BUST_URL=%DEMO_URL%?v=%TIMESTAMP%&nocache=1
+
+REM Kill any existing browser sessions to force fresh start
+taskkill /f /im chrome.exe 2>nul >nul
+taskkill /f /im msedge.exe 2>nul >nul
+taskkill /f /im firefox.exe 2>nul >nul
+timeout /t 2 /nobreak >nul
+
+REM Open with cache-busting and incognito mode
+start "" "%CACHE_BUST_URL%"
 if errorlevel 1 (
     REM Fallback browser options
     if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (

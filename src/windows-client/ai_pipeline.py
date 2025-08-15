@@ -39,7 +39,10 @@ class AIImageGenerator:
         self.model_path = Path(model_path)
         # Allow environment override to force Snapdragon behavior on Windows-on-ARM systems
         snapdragon_env = os.getenv('SNAPDRAGON_NPU', '').lower() in ('1', 'true', 'yes', 'y')
+        print(f"[DEBUG] AI Pipeline: SNAPDRAGON_NPU='{os.getenv('SNAPDRAGON_NPU', 'NOT_SET')}', snapdragon_env={snapdragon_env}")
+        print(f"[DEBUG] AI Pipeline: platform_type='{platform_info.get('platform_type')}', forcing Snapdragon={snapdragon_env}")
         self.is_snapdragon = platform_info.get('platform_type') == 'snapdragon' or snapdragon_env
+        print(f"[DEBUG] AI Pipeline: Final is_snapdragon={self.is_snapdragon}")
         self.pipeline = None
         self.device = None
         self.optimization_backend = None
