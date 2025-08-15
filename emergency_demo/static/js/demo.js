@@ -108,6 +108,7 @@ class StandaloneDemo {
         document.getElementById('completionBadge').style.display = 'none';
         document.getElementById('generateBtn').disabled = false;
         document.getElementById('generateBtn').textContent = 'Generate Image';
+        document.getElementById('generateInfo').textContent = 'Click to start AI image generation';
         
         // Reset metrics
         document.getElementById('timeValue').innerHTML = '--<span class="metric-unit">seconds</span>';
@@ -141,6 +142,7 @@ class StandaloneDemo {
         document.getElementById('status').className = 'status generating';
         document.getElementById('generateBtn').disabled = true;
         document.getElementById('generateBtn').textContent = 'Generating...';
+        document.getElementById('generateInfo').textContent = 'AI generation in progress...';
         
         // Start progress animation
         this.startProgressAnimation(generationTime);
@@ -213,11 +215,10 @@ class StandaloneDemo {
         // Show generated image
         this.showRandomImage();
         
-        // Enable new generation after 3 seconds
-        setTimeout(() => {
-            document.getElementById('generateBtn').disabled = false;
-            document.getElementById('generateBtn').textContent = 'Generate New Image';
-        }, 3000);
+        // Enable new generation immediately after completion
+        document.getElementById('generateBtn').disabled = false;
+        document.getElementById('generateBtn').textContent = 'Generate New Image';
+        document.getElementById('generateInfo').textContent = 'Click to generate another image';
     }
 
     showRandomImage() {

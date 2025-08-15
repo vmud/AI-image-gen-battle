@@ -199,9 +199,18 @@
             text-align: center;
         }
 
+        .generate-section {
+            background: rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 4px solid #00ff88;
+            text-align: center;
+            margin-top: 20px;
+        }
+
         .generate-btn {
-            padding: 20px 40px;
-            font-size: 20px;
+            padding: 15px 30px;
+            font-size: 18px;
             font-weight: bold;
             background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
             color: #1a1a2e;
@@ -209,11 +218,12 @@
             border-radius: 10px;
             cursor: pointer;
             transition: all 0.3s ease;
-            margin-top: 20px;
+            width: 100%;
+            margin-bottom: 10px;
         }
 
         .generate-btn:hover {
-            transform: scale(1.05);
+            transform: scale(1.02);
             box-shadow: 0 8px 25px rgba(0, 255, 136, 0.4);
         }
 
@@ -221,6 +231,12 @@
             background: #666;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .generate-info {
+            font-size: 14px;
+            color: #888;
+            margin-top: 8px;
         }
         
         .completion-badge {
@@ -386,9 +402,6 @@
                         <small style="opacity: 0.8; margin-top: 10px;">
                             Click Generate to start AI image creation
                         </small>
-                        <button class="generate-btn" id="generateBtn" onclick="startGeneration()">
-                            Generate Image
-                        </button>
                     </div>
                     <img class="generated-image hidden" id="generatedImage" alt="Generated Image">
                 </div>
@@ -428,6 +441,15 @@
                 
                 <div class="prompt-display" id="promptDisplay">
                     💭 Prompt: "A futuristic retail store with advanced technology displays and holographic interfaces"
+                </div>
+                
+                <div class="generate-section">
+                    <button class="generate-btn" id="generateBtn" onclick="startGeneration()">
+                        Generate Image
+                    </button>
+                    <div class="generate-info" id="generateInfo">
+                        Click to start AI image generation
+                    </div>
                 </div>
             </div>
         </div>
