@@ -290,7 +290,7 @@ echo }
 goto :eof
 
 :create_launcher_scripts
-REM Main launcher with auto-frontend update
+REM Main launcher with user UI selection and auto-frontend update
 (
 echo @echo off
 echo setlocal EnableDelayedExpansion
@@ -302,27 +302,29 @@ echo echo   Auto-updating to latest frontend...
 echo echo ==========================================
 echo echo.
 echo.
-echo REM Detect platform
-echo for /f "tokens=2 delims==" %%%%i in ^('wmic cpu get name /value ^^^| find "Name"'^) do ^(
-echo     set "cpuName=%%%%i"
-echo ^)
+echo REM Prompt user to select demo UI
+echo echo Please select which demo UI to launch:
+echo echo.
+echo echo 1^) Intel Demo UI ^(intel-demo.html^)
+echo echo 2^) Snapdragon Demo UI ^(snapdragon-demo.html^)
+echo echo.
+echo set /p "uiChoice=Enter your choice ^(1 or 2^): "
 echo.
-echo echo ^^^^!cpuName^^^^! ^^^| findstr /i "snapdragon qualcomm arm" ^>nul  
-echo if ^^^^!errorlevel^^^^! == 0 ^(
-echo     set "detectedPlatform=snapdragon"
-echo     echo Snapdragon processor detected
+echo if "^^^^!uiChoice^^^^!"=="1" ^(
+echo     set "selectedPlatform=intel"
+echo     set "selectedUI=intel-demo.html"
+echo     echo Selected: Intel Demo UI
+echo ^) else if "^^^^!uiChoice^^^^!"=="2" ^(
+echo     set "selectedPlatform=snapdragon"
+echo     set "selectedUI=snapdragon-demo.html"
+echo     echo Selected: Snapdragon Demo UI
 echo ^) else ^(
-echo     echo ^^^^!cpuName^^^^! ^^^| findstr /i "intel" ^>nul
-echo     if ^^^^!errorlevel^^^^! == 0 ^(
-echo         set "detectedPlatform=intel"
-echo         echo Intel processor detected
-echo     ^) else ^(
-echo         set "detectedPlatform=intel"
-echo         echo Unknown processor, defaulting to Intel
-echo     ^)
+echo     echo Invalid choice. Defaulting to Intel Demo UI.
+echo     set "selectedPlatform=intel"
+echo     set "selectedUI=intel-demo.html"
 echo ^)
 echo.
-echo echo Platform: ^^^^!detectedPlatform^^^^!
+echo echo Loading ^^^^!selectedUI^^^^!...
 echo echo.
 echo.
 echo REM Check for latest frontend update
@@ -354,8 +356,8 @@ echo     echo Source directory not found, using deployed version
 echo ^)
 echo.
 echo.
-echo REM Configure platform-specific interface
-echo echo Configuring ^^^^!detectedPlatform^^^^! interface...
+echo REM Configure selected UI interface
+echo echo Configuring ^^^^!selectedUI^^^^! interface...
 echo.
 echo ^(
 echo echo import re
@@ -365,15 +367,11 @@ echo echo # Read demo_client.py
 echo echo with open^^^('src/demo_client.py', 'r', encoding='utf-8'^^^) as f:
 echo echo     content = f.read^^^^^^
 echo echo.
-echo echo # Platform-specific route
-echo echo if '^^^^!detectedPlatform^^^^!' == 'snapdragon':
-echo echo     new_route = """        @self.app.route^^^('/'^^^)
+echo echo # User-selected UI route
+echo echo selected_ui = '^^^^!selectedUI^^^^!'
+echo echo new_route = f"""        @self.app.route^^^('/'^^^)
 echo echo         def index^^^(self^^^):
-echo echo             return send_from_directory^^^('static', 'snapdragon-demo.html'^^^)"""
-echo echo else:
-echo echo     new_route = """        @self.app.route^^^('/'^^^)
-echo echo         def index^^^(self^^^):
-echo echo             return send_from_directory^^^('static', 'intel-demo.html'^^^)"""
+echo echo             return send_from_directory^^^('static', '{selected_ui}'^^^)"""
 echo echo.
 echo echo # Replace platform selection route
 echo echo selection_route = r'@self\\.app\\.route\\\^^^(\\'^/\\'^\\\^^^)\\s+def index\\\^^^(self\\\^^^):.*?return render_template_string\\\^^^(html\\\^^^)'
@@ -383,24 +381,25 @@ echo echo # Write back
 echo echo with open^^^('src/demo_client.py', 'w', encoding='utf-8'^^^) as f:
 echo echo     f.write^^^(content^^^)
 echo echo.
-echo echo print^^^('✓ ^^^^!detectedPlatform^^^^! interface configured'^^^)
+echo echo print^^^(f'✓ {selected_ui} interface configured'^^^)
 echo ^) ^> temp_route_fix.py
 echo.
 echo call .venv\Scripts\activate.bat ^>nul 2^>^^^&1
 echo python temp_route_fix.py ^>nul 2^>^^^&1
 echo del temp_route_fix.py ^>nul 2^>^^^&1
 echo.
-echo echo ✓ Demo configured for ^^^^!detectedPlatform^^^^! platform
+echo echo ✓ Demo configured for ^^^^!selectedUI^^^^!
 echo echo.
 echo.
 echo echo ==========================================
-echo echo   Starting ^^^^!detectedPlatform^^^^! AI Demo
+echo echo   Starting AI Demo with ^^^^!selectedUI^^^^!
 echo echo   Latest "Get Snapped" Interface
 echo echo ==========================================
 echo echo.
 echo.
-echo set DEMO_PLATFORM=^^^^!detectedPlatform^^^^!
-echo python src\demo_client.py --platform=^^^^!detectedPlatform^^^^!
+echo set DEMO_PLATFORM=^^^^!selectedPlatform^^^^!
+echo set DEMO_UI=^^^^!selectedUI^^^^!
+echo python src\demo_client.py --platform=^^^^!selectedPlatform^^^^! --ui=^^^^!selectedUI^^^^!
 echo.
 echo echo.
 echo echo Demo has stopped.
