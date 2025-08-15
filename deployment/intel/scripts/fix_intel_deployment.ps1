@@ -367,21 +367,42 @@ Write-FixInfo "Clearing pip cache for fresh downloads..."
 Write-FixInfo "Installing PyTorch ecosystem for DirectML compatibility..."
 
 try {
-    # Step 1: Install PyTorch 2.0.1 and torchvision 0.15.2
-    Write-FixInfo "Step 1: Installing PyTorch 2.0.1 and torchvision 0.15.2..."
-    & pip install torch==2.0.1 torchvision==0.15.2 --index-url https://download.pytorch.org/whl/cpu
+    # CRITICAL: DirectML is now in maintenance mode - using legacy resolver
+    Write-FixWarning "DirectML is in maintenance mode - using legacy resolver for compatibility"
+    Write-FixInfo "Microsoft recommends Windows ML for Windows 11 24H2+, but DirectML still works"
+    
+    # Step 1: Install PyTorch 2.3.1 (torch-directml supports up to 2.3.1)
+    Write-FixInfo "Step 1: Installing PyTorch 2.3.1 and torchvision 0.18.1 (torch-directml compatible)..."
+    & pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to install PyTorch and torchvision"
     }
-    Write-FixSuccess "Installed compatible PyTorch and torchvision"
+    Write-FixSuccess "Installed torch-directml compatible PyTorch"
     
-    # Step 2: Install DirectML
-    Write-FixInfo "Step 2: Installing torch-directml..."
-    & pip install torch-directml --index-url https://download.pytorch.org/whl/directml
+    # Step 2: Install DirectML with legacy resolver (CRITICAL FIX)
+    Write-FixInfo "Step 2: Installing torch-directml with legacy resolver..."
+    & pip install torch-directml --use-deprecated=legacy-resolver
     if ($LASTEXITCODE -ne 0) {
-        throw "Failed to install torch-directml"
+        Write-FixWarning "torch-directml failed with legacy resolver, trying fallback methods..."
+        
+        # Fallback: Try with no-deps to avoid conflicts
+        & pip install torch-directml --no-deps --use-deprecated=legacy-resolver
+        if ($LASTEXITCODE -ne 0) {
+            Write-FixError "torch-directml installation failed with all methods"
+            Write-FixInfo "Installing ONNX Runtime DirectML as alternative..."
+            
+            # Fallback to ONNX Runtime DirectML
+            & pip install onnxruntime-directml
+            if ($LASTEXITCODE -ne 0) {
+                throw "Failed to install any DirectML package"
+            }
+            Write-FixSuccess "Installed ONNX Runtime DirectML as DirectML alternative"
+        } else {
+            Write-FixSuccess "Installed torch-directml with no-deps fallback"
+        }
+    } else {
+        Write-FixSuccess "Installed torch-directml with legacy resolver"
     }
-    Write-FixSuccess "Installed torch-directml successfully"
     
     # Step 3: Install Hugging Face packages
     Write-FixInfo "Step 3: Installing Hugging Face packages..."
@@ -401,22 +422,39 @@ try {
         Write-FixInfo "Installed $package"
     }
     
-    # Step 4: Install remaining dependencies
-    Write-FixInfo "Step 4: Installing remaining dependencies..."
-    $otherPackages = @(
+    # Step 4: Install Intel optimizations and remaining dependencies
+    Write-FixInfo "Step 4: Installing Intel Extension for PyTorch (CPU optimization)..."
+    & pip install intel-extension-for-pytorch --use-deprecated=legacy-resolver
+    if ($LASTEXITCODE -ne 0) {
+        Write-FixWarning "Intel Extension for PyTorch failed (optional)"
+    } else {
+        Write-FixSuccess "Installed Intel Extension for PyTorch"
+    }
+    
+    # Install ONNX Runtime DirectML as backup acceleration method
+    Write-FixInfo "Installing ONNX Runtime DirectML (DirectML alternative)..."
+    & pip install onnxruntime-directml
+    if ($LASTEXITCODE -ne 0) {
+        Write-FixWarning "ONNX Runtime DirectML failed (optional but recommended)"
+    } else {
+        Write-FixSuccess "Installed ONNX Runtime DirectML"
+    }
+    
+    # Install remaining core dependencies
+    Write-FixInfo "Installing remaining core dependencies..."
+    $corePackages = @(
         "flask>=2.0.0",
         "flask-socketio>=5.0.0", 
         "requests>=2.25.0",
         "psutil>=5.8.0",
         "numpy>=1.21.0",
-        "pillow>=8.0.0",
-        "onnxruntime-directml>=1.16.0"
+        "pillow>=8.0.0"
     )
     
-    foreach ($package in $otherPackages) {
+    foreach ($package in $corePackages) {
         & pip install $package
         if ($LASTEXITCODE -ne 0) {
-            Write-FixWarning "Failed to install $package (may not be critical)"
+            Write-FixWarning "Failed to install $package (may affect functionality)"
         } else {
             Write-FixInfo "Installed $package"
         }
@@ -453,15 +491,40 @@ except Exception as e:
 
 try:
     import torch
-    import torch_directml
     print(f"✓ PyTorch: {torch.__version__}")
-    print("✓ DirectML: Available")
-    if torch_directml.is_available():
-        print("✓ DirectML device: Working")
-    else:
-        print("! DirectML device: Not available")
+    
+    # Test torch-directml (primary acceleration)
+    try:
+        import torch_directml
+        print("✓ torch-directml: Available")
+        if torch_directml.is_available():
+            device = torch_directml.device()
+            print(f"✓ DirectML device: {device}")
+        else:
+            print("! DirectML device: Not available")
+    except ImportError:
+        print("✗ torch-directml: Not available")
+    
+    # Test ONNX Runtime DirectML (fallback acceleration)
+    try:
+        import onnxruntime as ort
+        providers = ort.get_available_providers()
+        if 'DmlExecutionProvider' in providers:
+            print("✓ ONNX Runtime DirectML: Available")
+        else:
+            print("! ONNX Runtime DirectML: Not in providers")
+    except ImportError:
+        print("✗ ONNX Runtime: Not available")
+    
+    # Test Intel Extension (CPU optimization)
+    try:
+        import intel_extension_for_pytorch as ipex
+        print("✓ Intel Extension for PyTorch: Available")
+    except ImportError:
+        print("✗ Intel Extension: Not available")
+        
 except Exception as e:
-    print(f"✗ DirectML: {e}")
+    print(f"✗ PyTorch/DirectML test failed: {e}")
 
 print("=== VERIFICATION COMPLETE ===")
 '@
