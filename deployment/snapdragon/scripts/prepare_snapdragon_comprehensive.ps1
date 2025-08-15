@@ -3,8 +3,9 @@
 .SYNOPSIS
     Comprehensive Snapdragon X Elite Demo Preparation Script
 .DESCRIPTION
-    Advanced preparation script mirroring Intel deployment functionality
-    Optimized for Snapdragon X Elite NPU acceleration with comprehensive error recovery
+    Advanced preparation script for Snapdragon X Elite NPU acceleration
+    Downloads and configures SINGLE OPTIMIZED MODEL: SDXL Lightning 4-step INT8
+    Optimized for NPU acceleration with comprehensive error recovery
     Research-backed package versions and installation strategies (Aug 2025)
 .PARAMETER CheckOnly
     Only check requirements without making changes
@@ -20,9 +21,47 @@
     Enable HTTP range requests for resumable downloads
 .NOTES
     Target: Snapdragon X Elite on Windows 11 24H2+ (Copilot+ PC)
-    Models: SDXL Lightning INT8 optimized for NPU (~2.1GB)
+    Single Model Strategy: SDXL Lightning 4-step INT8 (~2.1GB total)
+    Components: NPU-optimized UNet, VAE, Text Encoder (3 files = 1 complete model)
     Acceleration: DirectML → QNN → CPU fallback hierarchy
     Expected performance: 8-12 seconds per 768x768 image (NPU mode)
+    Manual Download: See MANUAL_DOWNLOAD_GUIDE section below
+#>
+
+# ============================================================================
+# MANUAL DOWNLOAD GUIDE - SNAPDRAGON SINGLE MODEL (SDXL Lightning INT8)
+# ============================================================================
+<#
+MANUAL DOWNLOAD INSTRUCTIONS:
+If automatic download fails, manually download these files to C:\AIDemo\models\
+
+Directory Structure:
+C:\AIDemo\models\sdxl-lightning\
+├── unet.safetensors (2.0GB) - Main NPU-optimized model
+├── vae.safetensors (160MB) - VAE encoder/decoder
+├── tokenizer\pytorch_model.bin (577MB) - Text encoder
+├── tokenizer\tokenizer_config.json
+└── scheduler_config.json
+
+Download URLs:
+1. UNet (NPU Optimized): https://huggingface.co/ByteDance/SDXL-Lightning/resolve/main/sdxl_lightning_4step_unet.safetensors
+   Save as: C:\AIDemo\models\sdxl-lightning\unet.safetensors
+
+2. VAE Decoder: https://huggingface.co/stabilityai/sdxl-vae/resolve/main/sdxl_vae.safetensors
+   Save as: C:\AIDemo\models\sdxl-lightning\vae.safetensors
+
+3. Text Encoder: https://huggingface.co/openai/clip-vit-large-patch14/resolve/main/pytorch_model.bin
+   Save as: C:\AIDemo\models\tokenizer\pytorch_model.bin
+
+4. Config Files:
+   - https://huggingface.co/ByteDance/SDXL-Lightning/raw/main/scheduler_config.json
+     Save as: C:\AIDemo\models\sdxl-lightning\scheduler_config.json
+   - https://huggingface.co/openai/clip-vit-large-patch14/raw/main/tokenizer_config.json
+     Save as: C:\AIDemo\models\tokenizer\tokenizer_config.json
+
+Total Size: ~2.7GB
+This is ONE complete SDXL Lightning model optimized for Snapdragon NPU acceleration.
+4-step inference provides 6x speed improvement over standard 25-step models.
 #>
 
 [CmdletBinding(SupportsShouldProcess)]

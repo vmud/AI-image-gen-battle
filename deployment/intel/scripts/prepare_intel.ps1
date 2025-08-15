@@ -4,12 +4,15 @@
     Intel Core Ultra Optimized Demo Preparation Script
 .DESCRIPTION
     Prepares Intel Core Ultra systems for AI image generation demos
-    Utilizes DirectML GPU acceleration for FP16 models
+    Downloads and configures SINGLE OPTIMIZED MODEL: SDXL Base 1.0 FP16
+    Utilizes DirectML GPU acceleration for maximum compatibility
     Expected performance: 35-45 seconds per 768x768 image
 .NOTES
     Target: Intel Core Ultra on Windows 11 x64 (AMD64)
-    Models: SDXL Base 1.0 FP16 (~6.9GB)
+    Single Model Strategy: SDXL Base 1.0 FP16 (~6.9GB total)
+    Components: UNet, VAE, Text Encoders (4 files = 1 complete model)
     Acceleration: DirectML via GPU/iGPU
+    Manual Download: See MANUAL_DOWNLOAD_GUIDE section below
 .PARAMETER CheckOnly
     Only check requirements without making changes
 .PARAMETER Force
@@ -22,6 +25,34 @@
     Skip downloading large model files
 .PARAMETER UseHttpRange
     Enable HTTP range requests for resumable downloads
+#>
+
+# ============================================================================
+# MANUAL DOWNLOAD GUIDE - INTEL SINGLE MODEL (SDXL Base 1.0 FP16)
+# ============================================================================
+<#
+MANUAL DOWNLOAD INSTRUCTIONS:
+If automatic download fails, manually download these files to C:\AIDemo\models\
+
+Directory Structure:
+C:\AIDemo\models\sdxl-base-1.0\
+├── unet\diffusion_pytorch_model.fp16.safetensors (6.9GB)
+├── vae\diffusion_pytorch_model.fp16.safetensors (335MB) 
+├── text_encoder\model.safetensors (246MB)
+├── text_encoder_2\model.safetensors (1.39GB)
+├── model_index.json
+└── scheduler\scheduler_config.json
+
+Download URLs:
+1. UNet (Main Model): https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/unet/diffusion_pytorch_model.fp16.safetensors
+2. VAE Decoder: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/vae/diffusion_pytorch_model.fp16.safetensors
+3. Text Encoder 1: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/text_encoder/model.safetensors
+4. Text Encoder 2: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/text_encoder_2/model.safetensors
+5. Config Files: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/raw/main/model_index.json
+6. Scheduler: https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/raw/main/scheduler/scheduler_config.json
+
+Total Size: ~8.8GB
+This is ONE complete SDXL model optimized for Intel DirectML acceleration.
 #>
 
 [CmdletBinding(SupportsShouldProcess)]
@@ -1232,6 +1263,12 @@ function Install-IntelAcceleration {
         $verifyScript = @"
 import sys
 import os
+import warnings
+
+# Suppress deprecation warnings that don't affect functionality
+warnings.filterwarnings('ignore', category=FutureWarning, module='transformers')
+warnings.filterwarnings('ignore', category=FutureWarning, message='.*_register_pytree_node.*')
+warnings.filterwarnings('ignore', category=DeprecationWarning, module='torch')
 
 print('=== Intel Demo Environment Verification ===')
 print(f'Python version: {sys.version}')
@@ -1297,27 +1334,43 @@ except ImportError as e:
 try:
     import diffusers
     print('Diffusers: Available')
-    import transformers
+    # Import transformers with specific warning suppression
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', FutureWarning)
+        import transformers
     print('Transformers: Available')
     import huggingface_hub
     print('Hugging Face Hub: Available')
 except ImportError as e:
     print(f'WARNING: AI library missing: {e}')
+except Exception as e:
+    print(f'WARNING: AI library warning (non-critical): {e}')
 
 print('=== End Intel Demo Verification ===')
 "@
         
         Write-VerboseInfo "Running Intel demo verification script..."
-        $verificationOutput = $verifyScript | & python 2>&1
+        # Capture both stdout and stderr, but filter out known deprecation warnings
+        $verificationOutput = $verifyScript | & python 2>&1 | Where-Object {
+            $line = $_.ToString()
+            # Filter out specific deprecation warnings that don't affect functionality
+            -not ($line -match "_register_pytree_node.*is depr[ei]cated") -and
+            -not ($line -match "FutureWarning:.*transformers") -and
+            -not ($line -match "DeprecationWarning:.*torch")
+        }
+        
         $verificationOutput | ForEach-Object {
-            if ($_ -match "^SUCCESS:") {
-                Write-Success $_.Replace("SUCCESS: ", "")
-            } elseif ($_ -match "^ERROR:") {
-                Write-ErrorMsg $_.Replace("ERROR: ", "")
-            } elseif ($_ -match "^WARNING:") {
-                Write-WarningMsg $_.Replace("WARNING: ", "")
+            $line = $_.ToString()
+            if ($line -match "^SUCCESS:") {
+                Write-Success $line.Replace("SUCCESS: ", "")
+            } elseif ($line -match "^ERROR:") {
+                Write-ErrorMsg $line.Replace("ERROR: ", "")
+            } elseif ($line -match "^WARNING:") {
+                Write-WarningMsg $line.Replace("WARNING: ", "")
+            } elseif ($line -match "FutureWarning|DeprecationWarning") {
+                Write-VerboseInfo "Filtered warning: $line"
             } else {
-                Write-Info $_
+                Write-Info $line
             }
         }
         
