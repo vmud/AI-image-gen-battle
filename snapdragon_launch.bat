@@ -186,33 +186,54 @@ echo       - Lightning-fast 3-5 second generation with NPU acceleration
 echo       - Optimized Snapdragon X Elite AI performance
 echo       - Forcing fresh UI load (no cache)
 
-REM Create cache-busted URL with timestamp - FORCE Snapdragon demo route
-set TIMESTAMP=%date:~-4,4%%date:~-10,2%%date:~-7,2%%time:~0,2%%time:~3,2%%time:~6,2%
-set CACHE_BUST_URL=http://localhost:%DEMO_PORT%/snapdragon?v=%TIMESTAMP%&nocache=1&platform=snapdragon
-echo       - Forced Snapdragon demo URL: %CACHE_BUST_URL%
-echo [%date% %time%] Enforced Snapdragon demo route: /snapdragon >> "%LOG_FILE%"
+REM Create simple cache-busted URL with random number
+set /a CACHE_RAND=%RANDOM%
+set CACHE_BUST_URL=http://localhost:%DEMO_PORT%/snapdragon?v=%CACHE_RAND%&emergency=1
+echo       - Demo URL: %CACHE_BUST_URL%
+echo [%date% %time%] Opening Snapdragon demo route: /snapdragon >> "%LOG_FILE%"
 
 REM Kill any existing browser sessions to force fresh start
+echo       - Closing existing browsers for fresh start...
 taskkill /f /im chrome.exe 2>nul >nul
 taskkill /f /im msedge.exe 2>nul >nul
 taskkill /f /im firefox.exe 2>nul >nul
 timeout /t 2 /nobreak >nul
 
-REM Open with cache-busting and incognito mode
-start "" "%CACHE_BUST_URL%"
+REM Try multiple browser launch methods
+echo       - Launching browser...
+echo [%date% %time%] Attempting browser launch: %CACHE_BUST_URL% >> "%LOG_FILE%"
+
+REM Method 1: Default system browser
+start "" "%CACHE_BUST_URL%" 2>nul
 if errorlevel 1 (
-    REM Fallback browser options
+    echo       - Default browser failed, trying specific browsers...
+    
+    REM Method 2: Try Chrome
     if exist "C:\Program Files\Google\Chrome\Application\chrome.exe" (
-        start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" "%DEMO_URL%"
-    ) else if exist "C:\Program Files\Mozilla Firefox\firefox.exe" (
-        start "" "C:\Program Files\Mozilla Firefox\firefox.exe" "%DEMO_URL%"
-    ) else if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (
-        start "" "C:\Program Files\Microsoft\Edge\Application\msedge.exe" "%DEMO_URL%"
+        echo       - Trying Chrome...
+        start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" "%CACHE_BUST_URL%" 2>nul
+    ) else if exist "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" (
+        echo       - Trying Chrome (x86)...
+        start "" "C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" "%CACHE_BUST_URL%" 2>nul
+    
+    REM Method 3: Try Edge
+    ) else if exist "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" (
+        echo       - Trying Edge...
+        start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" "%CACHE_BUST_URL%" 2>nul
+    
+    REM Method 4: Try simple start command
     ) else (
-        echo WARNING: Could not automatically open browser
-        echo Please manually navigate to: %DEMO_URL%
+        echo       - Trying Windows start command...
+        start %CACHE_BUST_URL% 2>nul
     )
 )
+
+REM Give user manual option
+echo.
+echo *** MANUAL LAUNCH INSTRUCTIONS ***
+echo If browser did not open automatically, please open your browser and navigate to:
+echo %CACHE_BUST_URL%
+echo.
 
 echo [%date% %time%] Browser launched successfully >> "%LOG_FILE%"
 
