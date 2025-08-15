@@ -66,32 +66,33 @@ class AIImageGenerator:
     def _setup_snapdragon_npu(self):
         """Setup Snapdragon-specific optimizations using Qualcomm AI Engine"""
         try:
-            # For Snapdragon, we'll use ONNX Runtime with QNN backend
-            import onnxruntime as ort  # type: ignore
-            
-            # Check for Qualcomm AI Hub optimized models
+            # Check for Qualcomm AI Hub optimized models first
             optimized_model = self.model_path / "sdxl_snapdragon_optimized"
-            
+
             if optimized_model.exists():
-                logger.info("Found Qualcomm AI Hub optimized model")
-                self.optimization_backend = "qualcomm_npu"
-                
-                # Use ONNX Runtime with QNN execution provider
-                providers = ['QNNExecutionProvider', 'CPUExecutionProvider']
-                
+                # Resolve providers from environment if available
+                providers_env = os.getenv("ONNX_PROVIDERS")
+                if providers_env:
+                    providers = [p.strip() for p in providers_env.split(",") if p.strip()]
+                else:
+                    providers = ['QNNExecutionProvider', 'CPUExecutionProvider']
+
+                # Import ONNX Runtime only when needed
+                import onnxruntime as ort  # type: ignore
+
                 # Create session options for optimal NPU performance
                 sess_options = ort.SessionOptions()
                 sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-                
-                # Load the optimized ONNX model
+
+                self.optimization_backend = "qualcomm_npu"
+
+                # Load the optimized ONNX model using QNN
                 self._load_snapdragon_optimized_model(optimized_model, providers, sess_options)
-                
             else:
-                logger.warning("Snapdragon optimized model not found, using standard pipeline")
+                logger.info("Snapdragon optimized model not found; using standard pipeline")
                 self._setup_standard_pipeline()
-                
         except Exception as e:
-            logger.error(f"Failed to setup Snapdragon NPU: {e}")
+            logger.warning(f"Snapdragon NPU setup unavailable ({e}); using standard pipeline")
             self._setup_standard_pipeline()
     
     def _load_snapdragon_optimized_model(self, model_path, providers, sess_options):
@@ -124,8 +125,10 @@ class AIImageGenerator:
             logger.info("Successfully loaded Snapdragon NPU-optimized SDXL model")
             
         except Exception as e:
-            logger.error(f"Error loading Snapdragon optimized model: {e}")
-            raise
+            logger.warning(f"Error loading Snapdragon optimized model ({e}); falling back to standard pipeline")
+            # Reset backend so metrics reflect the actual backend used
+            self.optimization_backend = None
+            self._setup_standard_pipeline()
     
     def _setup_intel_directml(self):
         """Setup Intel-specific optimizations using DirectML with performance monitoring"""
@@ -421,7 +424,7 @@ class AIImageGenerator:
                 "error_step": len(step_times) if 'step_times' in locals() else 0
             }
             metrics.update(error_metrics)
-            logger.error(f"Intel generation failed: {e}")
+            logger.error(f"Image generation failed: {e}")
             raise
     
     def _analyze_intel_performance(self, generation_time: float, steps: int, memory_used: float) -> Dict[str, Any]:
