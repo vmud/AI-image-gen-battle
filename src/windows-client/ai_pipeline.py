@@ -9,9 +9,14 @@ import time
 import logging
 from typing import Optional, Dict, Any, Callable, Tuple
 from pathlib import Path
-import numpy as np
-from PIL import Image
-import torch
+try:
+    import numpy as np  # type: ignore
+except Exception:
+    np = None  # type: ignore
+try:
+    from PIL import Image  # type: ignore
+except Exception:
+    Image = None  # type: ignore
 import platform
 
 # Configure logging
@@ -140,7 +145,7 @@ class AIImageGenerator:
                 # Intel MKL optimizations for Core Ultra
                 os.environ['MKL_ENABLE_INSTRUCTIONS'] = 'AVX512'
                 os.environ['MKL_DYNAMIC'] = 'FALSE'
-                os.environ['MKL_NUM_THREADS'] = str(max(4, os.cpu_count() // 2))
+                os.environ['MKL_NUM_THREADS'] = str(max(4, int(((os.cpu_count() or 8) / 2))))
                 
                 logger.info("Intel DirectML environment optimized for Core Ultra")
                 
@@ -258,7 +263,7 @@ class AIImageGenerator:
         resolution: Optional[Tuple[int, int]] = None,
         seed: Optional[int] = None,
         progress_callback: Optional[Callable] = None
-    ) -> Tuple[Image.Image, Dict[str, Any]]:
+    ) -> Tuple[Any, Dict[str, Any]]:
         """
         Generate high-quality image with Intel-optimized performance benchmarking
         

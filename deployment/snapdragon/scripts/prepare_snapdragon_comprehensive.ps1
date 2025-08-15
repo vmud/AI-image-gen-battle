@@ -666,7 +666,8 @@ function Install-SnapdragonAcceleration {
                 "diffusers==0.25.1",
                 "accelerate==0.25.0",
                 "safetensors==0.4.1",
-                "huggingface_hub==0.24.6"
+                "huggingface_hub==0.24.6",
+                "optimum"                  # ONNX model optimization utilities
             )
             Critical = $true
             Description = "Stable AI libraries for ARM64"
@@ -1148,6 +1149,80 @@ function Update-Repository {
                 
                 # Copy all files
                 Copy-Item "$sourceClient\*" -Destination $script:CLIENT_PATH -Recurse -Force
+
+                # Verify deployment contents and inject shims if needed
+                Write-Info "Verifying deployed client contents..."
+                $expected = @("ai_pipeline.py","platform_detection.py","demo_client.py","environment_validator.py")
+                foreach ($f in $expected) {
+                    if (Test-Path "$script:CLIENT_PATH\$f") { 
+                        Write-Success "Present: $f" 
+                    } else { 
+                        Write-WarningMsg "Missing: $f" 
+                    }
+                }
+
+                # Ensure AIImagePipeline wrapper exists (for benchmark import)
+                $destFile = "$script:CLIENT_PATH\ai_pipeline.py"
+                try { 
+                    $content = Get-Content $destFile -Raw -ErrorAction Stop 
+                } catch { 
+                    $content = "" 
+                }
+                if ($content -notmatch "class\s+AIImagePipeline") {
+                    Write-WarningMsg "ai_pipeline.py missing AIImagePipeline compatibility class - injecting shim"
+                    $shim = @'
+# Backwards-compatibility wrapper for Snapdragon benchmark
+class AIImagePipeline(AIImageGenerator):
+    """
+    Compatibility layer exposing a simpler .generate(...) API expected by the
+    Snapdragon performance test scripts. Internally delegates to AIImageGenerator.
+    """
+    def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
+        super().__init__(platform_info, model_path)
+
+    def generate(
+        self,
+        prompt: str,
+        steps: int = 4,
+        width: int = 768,
+        height: int = 768,
+        negative_prompt: Optional[str] = None,
+        guidance_scale: Optional[float] = None,
+        seed: Optional[int] = None,
+        progress_callback: Optional[Callable] = None
+    ):
+        image, _metrics = self.generate_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            resolution=(width, height),
+            seed=seed,
+            progress_callback=progress_callback,
+        )
+        return image
+'@
+                    Add-Content -Path $destFile -Value $shim -Encoding UTF8
+                    Write-Success "Injected AIImagePipeline shim into ai_pipeline.py"
+                } else {
+                    Write-VerboseInfo "AIImagePipeline class already present"
+                }
+
+                # Ensure Snapdragon launcher is present for start scripts
+                $launcherPath = "$script:CLIENT_PATH\launch_snapdragon_demo.py"
+                if (!(Test-Path $launcherPath)) {
+                    Write-WarningMsg "launch_snapdragon_demo.py missing - creating shim to demo_client"
+                    $launcher = @'
+# Snapdragon launcher shim - delegates to demo_client
+from demo_client import main
+if __name__ == "__main__":
+    main()
+'@
+                    $launcher | Out-File -FilePath $launcherPath -Encoding UTF8
+                    Write-Success "Created launch_snapdragon_demo.py"
+                } else {
+                    Write-VerboseInfo "Launcher present: launch_snapdragon_demo.py"
+                }
                 
                 # Create Snapdragon-specific configuration
                 $snapdragonConfig = @{
@@ -1327,6 +1402,34 @@ function Test-SnapdragonPerformance {
     
     & "$script:VENV_PATH\Scripts\Activate.ps1"
     Set-Location $script:CLIENT_PATH
+
+    # Ensure AIImagePipeline exists in ai_pipeline.py before running benchmark (self-heal)
+    try {
+        $aiFile = Join-Path $script:CLIENT_PATH 'ai_pipeline.py'
+        $content = Get-Content $aiFile -Raw -ErrorAction Stop
+        if ($content -notmatch "class\s+AIImagePipeline") {
+            Write-WarningMsg "ai_pipeline.py missing AIImagePipeline class - injecting compatibility shim (performance test)"
+            $shim = @'
+# Backwards-compatibility wrapper for Snapdragon benchmark
+class AIImagePipeline(AIImageGenerator):
+    def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
+        super().__init__(platform_info, model_path)
+    def generate(self, prompt: str, steps: int = 4, width: int = 768, height: int = 768,
+                 negative_prompt: Optional[str] = None, guidance_scale: Optional[float] = None,
+                 seed: Optional[int] = None, progress_callback: Optional[Callable] = None):
+        image, _ = self.generate_image(prompt=prompt, steps=steps, resolution=(width, height),
+                                       negative_prompt=negative_prompt, guidance_scale=guidance_scale,
+                                       seed=seed, progress_callback=progress_callback)
+        return image
+'@
+            Add-Content -Path $aiFile -Value $shim -Encoding UTF8
+            Write-Success "Injected AIImagePipeline shim for benchmark"
+        } else {
+            Write-VerboseInfo "AIImagePipeline class present for benchmark"
+        }
+    } catch {
+        Write-WarningMsg "Could not verify/inject AIImagePipeline: $_"
+    }
     
     $testScript = @"
 import time
@@ -1340,7 +1443,25 @@ print('Using DirectML + QNN acceleration')
 
 try:
     from platform_detection import detect_platform
-    from ai_pipeline import AIImagePipeline
+    try:
+        # Prefer wrapper; if absent, synthesize a compatible wrapper on the fly
+        from ai_pipeline import AIImagePipeline
+    except Exception:
+        from ai_pipeline import AIImageGenerator as _AIImageGenerator
+        class AIImagePipeline(_AIImageGenerator):
+            def generate(self, prompt, steps=4, width=768, height=768,
+                         negative_prompt=None, guidance_scale=None,
+                         seed=None, progress_callback=None):
+                image, _ = self.generate_image(
+                    prompt=prompt,
+                    steps=steps,
+                    resolution=(width, height),
+                    negative_prompt=negative_prompt,
+                    guidance_scale=guidance_scale,
+                    seed=seed,
+                    progress_callback=progress_callback,
+                )
+                return image
     
     # Detect platform
     platform = detect_platform()

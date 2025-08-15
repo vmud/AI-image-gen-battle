@@ -799,7 +799,7 @@ try:
         for key, value in platform.items():
             print(f"  {key}: {value}")
     
-    if platform['is_snapdragon']:
+    if platform.get('platform_type','').lower() == 'snapdragon':
         print("[OK] Snapdragon platform confirmed")
     else:
         print("[!] Not detected as Snapdragon")
@@ -833,7 +833,7 @@ try:
             elapsed = time.time() - start
             print(f"  Step {step}/{total} - {elapsed:.1f}s elapsed")
     
-    result = pipeline.generate(prompt, steps=4, callback=progress_callback if verbose else None)
+    result = pipeline.generate(prompt, steps=4, progress_callback=progress_callback if verbose else None)
     gen_time = time.time() - start
     
     print(f"\n[OK] Generation completed in {gen_time:.2f}s")
