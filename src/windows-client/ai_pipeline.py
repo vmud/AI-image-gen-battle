@@ -29,7 +29,9 @@ class AIImageGenerator:
     def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
         self.platform_info = platform_info
         self.model_path = Path(model_path)
-        self.is_snapdragon = platform_info.get('platform_type') == 'snapdragon'
+        # Allow environment override to force Snapdragon behavior on Windows-on-ARM systems
+        snapdragon_env = os.getenv('SNAPDRAGON_NPU', '').lower() in ('1', 'true', 'yes', 'y')
+        self.is_snapdragon = platform_info.get('platform_type') == 'snapdragon' or snapdragon_env
         self.pipeline = None
         self.device = None
         self.optimization_backend = None
@@ -65,7 +67,7 @@ class AIImageGenerator:
         """Setup Snapdragon-specific optimizations using Qualcomm AI Engine"""
         try:
             # For Snapdragon, we'll use ONNX Runtime with QNN backend
-            import onnxruntime as ort
+            import onnxruntime as ort  # type: ignore
             
             # Check for Qualcomm AI Hub optimized models
             optimized_model = self.model_path / "sdxl_snapdragon_optimized"
@@ -95,8 +97,8 @@ class AIImageGenerator:
     def _load_snapdragon_optimized_model(self, model_path, providers, sess_options):
         """Load Qualcomm-optimized SDXL model for Snapdragon"""
         try:
-            import onnxruntime as ort
-            from optimum.onnxruntime import ORTStableDiffusionXLPipeline
+            import onnxruntime as ort  # type: ignore
+            from optimum.onnxruntime import ORTStableDiffusionXLPipeline  # type: ignore
             
             # Load the Qualcomm AI Hub optimized SDXL pipeline
             # These models are specifically quantized and optimized for Snapdragon NPU
@@ -128,7 +130,7 @@ class AIImageGenerator:
     def _setup_intel_directml(self):
         """Setup Intel-specific optimizations using DirectML with performance monitoring"""
         try:
-            import torch_directml
+            import torch_directml  # type: ignore
             
             # Check if DirectML is available
             if torch_directml.is_available():
@@ -162,9 +164,9 @@ class AIImageGenerator:
     def _load_intel_optimized_model(self):
         """Load SDXL model optimized for Intel with DirectML and performance monitoring"""
         try:
-            from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
-            import torch_directml
-            import torch
+            from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler  # type: ignore
+            import torch_directml  # type: ignore
+            import torch  # type: ignore
             
             model_id = "stabilityai/stable-diffusion-xl-base-1.0"
             
@@ -222,7 +224,8 @@ class AIImageGenerator:
     def _setup_standard_pipeline(self):
         """Fallback to standard Stable Diffusion pipeline"""
         try:
-            from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler
+            from diffusers import StableDiffusionXLPipeline, DPMSolverMultistepScheduler  # type: ignore
+            import torch  # type: ignore
             
             model_id = "stabilityai/stable-diffusion-xl-base-1.0"
             
@@ -271,8 +274,9 @@ class AIImageGenerator:
             Tuple of (PIL Image, comprehensive metrics dict)
         """
         
-        if not self.pipeline:
+        if self.pipeline is None:
             raise RuntimeError("Pipeline not initialized - run model loading first")
+        assert self.pipeline is not None
         
         # Use Intel-optimized defaults
         steps = steps or self.default_steps
@@ -288,7 +292,7 @@ class AIImageGenerator:
             )
         
         # Set seed for reproducible Intel demos
-        import torch
+        import torch  # type: ignore
         if seed is not None:
             if self.device and "directml" in str(self.device):
                 # DirectML-compatible generator
@@ -300,7 +304,7 @@ class AIImageGenerator:
         
         # Initialize comprehensive metrics tracking
         metrics = {
-            "platform": "intel",
+            "platform": "snapdragon" if self.is_snapdragon else "intel",
             "backend": self.optimization_backend,
             "device": str(self.device),
             "resolution": f"{resolution[0]}x{resolution[1]}",
@@ -310,16 +314,16 @@ class AIImageGenerator:
         }
         
         # Performance monitoring setup
-        import psutil
+        import psutil  # type: ignore
         process = psutil.Process()
         initial_memory = process.memory_info().rss / 1024 / 1024  # MB
         
-        logger.info(f"Starting Intel DirectML generation: {steps} steps, {resolution[0]}x{resolution[1]}")
+        logger.info(f"Starting {'Snapdragon (QNN)' if self.is_snapdragon else 'Intel DirectML'} generation: {steps} steps, {resolution[0]}x{resolution[1]}")
         start_time = time.time()
+        step_times = []
         
         try:
             # Enhanced progress tracking with Intel performance data
-            step_times = []
             
             def intel_callback_wrapper(step, timestep, latents):
                 step_time = time.time()
@@ -339,7 +343,7 @@ class AIImageGenerator:
                 
                 return latents
             
-            # Generate image with Intel DirectML optimizations
+            # Generate image with platform-optimized path
             if self.optimization_backend == "directml":
                 result = self.pipeline(
                     prompt=prompt,
@@ -353,8 +357,14 @@ class AIImageGenerator:
                     callback_steps=1,
                     output_type="pil"
                 )
+            elif self.optimization_backend == "qualcomm_npu":
+                # Use Snapdragon-optimized generation path
+                result = self._generate_snapdragon_optimized(
+                    prompt, negative_prompt, steps, guidance_scale,
+                    resolution, generator, intel_callback_wrapper
+                )
             else:
-                # Fallback for CPU
+                # CPU fallback: ensure PIL output for consistency
                 result = self.pipeline(
                     prompt=prompt,
                     negative_prompt=negative_prompt,
@@ -364,7 +374,9 @@ class AIImageGenerator:
                     width=resolution[0],
                     generator=generator,
                     callback=intel_callback_wrapper,
-                    callback_steps=1
+                    callback_steps=1,
+                    output_type="pil",
+                    return_dict=True
                 )
             
             # Get the generated image
@@ -394,7 +406,7 @@ class AIImageGenerator:
                 metrics.update(intel_metrics)
             
             # Log comprehensive results
-            logger.info(f"Intel DirectML generation complete:")
+            logger.info(f"{'Snapdragon (QNN)' if self.is_snapdragon else 'Intel DirectML'} generation complete:")
             logger.info(f"  Time: {generation_time:.2f}s ({metrics['ms_per_step']}ms/step)")
             logger.info(f"  Performance: {performance_analysis['performance_rating']}")
             logger.info(f"  Memory: {memory_used:.1f}MB used")
@@ -470,7 +482,7 @@ class AIImageGenerator:
         }
         
         try:
-            import psutil
+            import psutil  # type: ignore
             
             # CPU utilization as proxy for Intel iGPU
             cpu_percent = psutil.cpu_percent(interval=0.1)
@@ -504,6 +516,7 @@ class AIImageGenerator:
         
         # The Qualcomm AI Hub models use optimized inference
         # with INT8 quantization and NPU-specific graph optimizations
+        assert self.pipeline is not None
         return self.pipeline(
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -532,7 +545,7 @@ class AIImageGenerator:
     def _get_intel_gpu_usage(self) -> float:
         """Get Intel GPU/NPU utilization percentage"""
         try:
-            import psutil
+            import psutil  # type: ignore
             # Simplified - real implementation would use Intel metrics APIs
             return psutil.cpu_percent()
         except:
@@ -563,7 +576,7 @@ class AIImageGenerator:
         """Download standard SDXL models for Intel"""
         logger.info("Downloading SDXL models for Intel...")
         
-        from huggingface_hub import snapshot_download
+        from huggingface_hub import snapshot_download  # type: ignore
         
         # Download SDXL base model
         snapshot_download(

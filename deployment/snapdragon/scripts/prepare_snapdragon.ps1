@@ -777,7 +777,7 @@ cd /d C:\AIDemo\client
 call C:\AIDemo\venv\Scripts\activate.bat
 set PYTHONPATH=C:\AIDemo\client
 set SNAPDRAGON_NPU=1
-set ONNX_PROVIDERS=DmlExecutionProvider,QNNExecutionProvider,CPUExecutionProvider
+set ONNX_PROVIDERS=QNNExecutionProvider,DmlExecutionProvider,CPUExecutionProvider
 python demo_client.py
 pause
 "@
@@ -797,7 +797,7 @@ Set-Location C:\AIDemo\client
 
 $env:PYTHONPATH = "C:\AIDemo\client"
 $env:SNAPDRAGON_NPU = "1"
-$env:ONNX_PROVIDERS = "DmlExecutionProvider,QNNExecutionProvider,CPUExecutionProvider"
+$env:ONNX_PROVIDERS = "QNNExecutionProvider,DmlExecutionProvider,CPUExecutionProvider"
 
 python demo_client.py
 
@@ -824,6 +824,12 @@ function Test-Performance {
     
     & C:\AIDemo\venv\Scripts\Activate.ps1
     Set-Location C:\AIDemo\client
+    
+    # Ensure Snapdragon-specific environment for performance test
+    $env:PYTHONPATH = "C:\AIDemo\client"
+    $env:SNAPDRAGON_NPU = "1"
+    # Prefer Qualcomm QNN over DirectML on Snapdragon
+    $env:ONNX_PROVIDERS = "QNNExecutionProvider,DmlExecutionProvider,CPUExecutionProvider"
     
     Write-VerboseInfo "Python path: $(& python -c 'import sys; print(sys.executable)')"
     Write-VerboseInfo "Working directory: $(Get-Location)"

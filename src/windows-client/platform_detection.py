@@ -26,8 +26,12 @@ class PlatformDetector:
         self.platform_info['machine'] = platform.machine()
         self.platform_info['processor'] = platform.processor()
         
-        # Detect CPU architecture
-        if 'ARM' in platform.machine().upper() or 'ARM64' in platform.machine().upper():
+        # Detect CPU architecture (allow environment override for Snapdragon)
+        force_snap = os.getenv('SNAPDRAGON_NPU', '').lower() in ('1', 'true', 'yes', 'y')
+        if force_snap:
+            self.platform_info['architecture'] = 'ARM64'
+            self.platform_info['platform_type'] = 'snapdragon'
+        elif 'ARM' in platform.machine().upper() or 'ARM64' in platform.machine().upper():
             self.platform_info['architecture'] = 'ARM64'
             self.platform_info['platform_type'] = 'snapdragon'
         else:
@@ -84,7 +88,8 @@ class PlatformDetector:
             # Snapdragon X Elite has dedicated NPU
             self.platform_info['ai_acceleration'] = 'NPU'
             self.platform_info['npu_available'] = True
-            self.platform_info['ai_framework'] = 'DirectML'
+            # Use ONNX Runtime with QNN provider on Snapdragon
+            self.platform_info['ai_framework'] = 'ONNX Runtime (QNN)'
             
         elif self.platform_info['platform_type'] == 'intel':
             # Intel Core Ultra uses integrated graphics + CPU
@@ -118,7 +123,7 @@ class PlatformDetector:
         
         if self.platform_info['platform_type'] == 'snapdragon':
             self.optimization_config = {
-                'device': 'DirectML',
+                'device': 'QNN',
                 'precision': 'fp16',
                 'batch_size': 1,
                 'use_npu': True,
