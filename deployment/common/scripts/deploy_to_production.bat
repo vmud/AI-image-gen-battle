@@ -106,7 +106,19 @@ call :copy_with_progress "%SourceDir%\docs" "%TargetDir%\docs\" "Documentation f
 call :copy_with_progress "%SourceDir%\README.md" "%TargetDir%\README.md" "README"
 
 echo.
-REM 6. Create necessary empty directories
+REM 6. Copy pre-downloaded models
+echo === Copying Pre-Downloaded Models ===
+if /i "!detectedPlatform!"=="intel" (
+    call :copy_with_progress "%SourceDir%\models\intel" "%TargetDir%\models\stable-diffusion\intel-optimized\" "Intel-optimized models"
+    call :copy_with_progress "%SourceDir%\models\common" "%TargetDir%\models\stable-diffusion\intel-optimized\" "Common model files"
+) else (
+    call :copy_with_progress "%SourceDir%\models\snapdragon" "%TargetDir%\models\stable-diffusion\snapdragon-optimized\" "Snapdragon-optimized models"
+    call :copy_with_progress "%SourceDir%\models\onnx" "%TargetDir%\models\stable-diffusion\snapdragon-optimized\" "ONNX model files"
+    call :copy_with_progress "%SourceDir%\models\common" "%TargetDir%\models\stable-diffusion\snapdragon-optimized\" "Common model files"
+)
+
+echo.
+REM 7. Create necessary empty directories
 echo === Creating Directory Structure ===
 if /i "!detectedPlatform!"=="intel" (
     set "modelPath=%TargetDir%\models\stable-diffusion\intel-optimized"
