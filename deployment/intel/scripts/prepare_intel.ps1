@@ -217,6 +217,37 @@ function Get-MachineFingerprint {
     }
 }
 
+# Convert PSObjects to Hashtables (recursive) to allow safe indexing and assignment
+function ConvertTo-HashtableRecursive {
+    param($InputObject)
+
+    if ($null -eq $InputObject) { return $null }
+
+    # Already a hashtable
+    if ($InputObject -is [hashtable]) { return $InputObject }
+
+    # PSCustomObject -> Hashtable
+    if ($InputObject -is [pscustomobject] -or $InputObject -is [System.Management.Automation.PSObject]) {
+        $ht = @{}
+        foreach ($prop in ($InputObject | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name)) {
+            $ht[$prop] = ConvertTo-HashtableRecursive ($InputObject.$prop)
+        }
+        return $ht
+    }
+
+    # Arrays / IEnumerable (but not string)
+    if ($InputObject -is [System.Collections.IEnumerable] -and -not ($InputObject -is [string])) {
+        $list = @()
+        foreach ($item in $InputObject) {
+            $list += ,(ConvertTo-HashtableRecursive $item)
+        }
+        return $list
+    }
+
+    # Fallback: return as-is
+    return $InputObject
+}
+
 # Initialize or load deployment state
 function Initialize-DeploymentState {
     Write-VerboseInfo "Initializing deployment state management"
@@ -238,6 +269,15 @@ function Initialize-DeploymentState {
                 $script:deploymentState = New-DeploymentState
             } else {
                 $script:deploymentState = $stateContent
+
+                # Normalize structures loaded from JSON to hashtables/arrays for safe indexing
+                $script:deploymentState.StepDetails      = ConvertTo-HashtableRecursive $script:deploymentState.StepDetails
+                $script:deploymentState.PackageVersions  = ConvertTo-HashtableRecursive $script:deploymentState.PackageVersions
+                $script:deploymentState.ValidationResults= ConvertTo-HashtableRecursive $script:deploymentState.ValidationResults
+                $script:deploymentState.Checkpoints      = ConvertTo-HashtableRecursive $script:deploymentState.Checkpoints
+                # Ensure arrays are actual arrays
+                $script:deploymentState.CompletedSteps   = @($script:deploymentState.CompletedSteps)
+                $script:deploymentState.ErrorHistory     = @($script:deploymentState.ErrorHistory)
                 
                 # Validate machine fingerprint for environment consistency
                 if ($script:deploymentState.MachineFingerprint.Hash -ne $script:machineFingerprint.Hash) {
@@ -359,6 +399,15 @@ function Set-StepCompleted {
     if ($script:deploymentState -eq $null) {
         Write-WarningMsg "No deployment state available"
         return
+    }
+
+    # Ensure containers are indexable/assignable
+    if (-not ($script:deploymentState.StepDetails -is [System.Collections.IDictionary])) {
+        $script:deploymentState.StepDetails = ConvertTo-HashtableRecursive $script:deploymentState.StepDetails
+        if ($null -eq $script:deploymentState.StepDetails) { $script:deploymentState.StepDetails = @{} }
+    }
+    if ($null -eq $script:deploymentState.CompletedSteps -or -not ($script:deploymentState.CompletedSteps -is [System.Collections.IEnumerable])) {
+        $script:deploymentState.CompletedSteps = @()
     }
     
     if (!(Test-StepCompleted $StepName)) {
