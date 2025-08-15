@@ -102,6 +102,7 @@ if ($Method -eq "auto") {
     try {
         $poetryVersion = poetry --version 2>$null
         if ($LASTEXITCODE -eq 0) {
+            Write-Host "[AUTO-DETECT] Found $poetryVersion" -ForegroundColor Gray
             # Test if Poetry environment works
             try {
                 poetry run python --version 2>$null | Out-Null

@@ -119,7 +119,7 @@ class ErrorMitigationSystem:
     
     def detect_concurrent_generation(self) -> bool:
         """Check if multiple generations are running"""
-        if self.display:
+        if self.display and hasattr(self.display, 'jobs') and self.display.jobs:
             active_jobs = sum(1 for job in self.display.jobs.values() 
                             if job.get('status') == 'active')
             return active_jobs > 1
