@@ -566,3 +566,34 @@ class AIImageGenerator:
             local_dir=self.model_path / "sdxl-base-1.0",
             ignore_patterns=["*.ckpt", "*.safetensors.index.json"]
         )
+
+# Backwards-compatibility wrapper for existing demo code
+class AIImagePipeline(AIImageGenerator):
+    """
+    Compatibility layer exposing a simpler .generate(...) API expected by the
+    Snapdragon performance test scripts. Internally delegates to AIImageGenerator.
+    """
+    def __init__(self, platform_info: Dict[str, Any], model_path: str = "C:\\AIDemo\\models"):
+        super().__init__(platform_info, model_path)
+
+    def generate(
+        self,
+        prompt: str,
+        steps: int = 4,
+        width: int = 768,
+        height: int = 768,
+        negative_prompt: Optional[str] = None,
+        guidance_scale: Optional[float] = None,
+        seed: Optional[int] = None,
+        progress_callback: Optional[Callable] = None
+    ):
+        image, _metrics = self.generate_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            steps=steps,
+            guidance_scale=guidance_scale,
+            resolution=(width, height),
+            seed=seed,
+            progress_callback=progress_callback,
+        )
+        return image

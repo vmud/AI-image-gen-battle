@@ -345,14 +345,14 @@ function Test-SnapdragonHardwareRequirements {
     }
     
     try {
-        # Check architecture (Snapdragon X Elite reports as AMD64 for compatibility)
+        # Check architecture (accept AMD64 and ARM64 for Windows on ARM Snapdragon systems)
         $arch = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
         
-        if ($arch -ne "AMD64") {
-            $hardwareStatus.Errors += "Not running on compatible architecture (found: $arch)"
-            Write-ErrorMsg "Architecture: $arch (expected AMD64 for Snapdragon X Elite)"
-        } else {
+        if (@("AMD64","ARM64") -contains $arch) {
             Write-Success "Architecture: $arch (Snapdragon X Elite compatible)"
+        } else {
+            $hardwareStatus.Errors += "Not running on compatible architecture (found: $arch)"
+            Write-ErrorMsg "Architecture: $arch (expected AMD64 or ARM64 for Snapdragon X Elite)"
         }
         
         # Check for Snapdragon X Elite processor
@@ -1103,9 +1103,23 @@ function Download-SimpleFileWithMirrors {
 function Update-Repository {
     Write-StepProgress "Deploying Snapdragon demo client files"
     
-    if (Test-StepCompleted "repository_update") {
+    # Even if this step was previously completed, validate destination contains required compatibility shim.
+    $destFile = "$script:CLIENT_PATH\ai_pipeline.py"
+    $needsRepair = $true
+    if (Test-Path $destFile) {
+        try {
+            $content = Get-Content $destFile -Raw
+            if ($content -match "class\s+AIImagePipeline") { $needsRepair = $false }
+        } catch {
+            $needsRepair = $true
+        }
+    }
+    
+    if (Test-StepCompleted "repository_update" -and -not $needsRepair) {
         Write-Info "Repository files already deployed"
         return $true
+    } elseif (Test-StepCompleted "repository_update" -and $needsRepair) {
+        Write-WarningMsg "Client files missing AIImagePipeline compatibility - re-deploying repository files"
     }
     
     # Find source path (mirroring Intel script logic)
