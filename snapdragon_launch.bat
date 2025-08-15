@@ -184,9 +184,11 @@ echo       - Lightning-fast 3-5 second generation with NPU acceleration
 echo       - Optimized Snapdragon X Elite AI performance
 echo       - Forcing fresh UI load (no cache)
 
-REM Create cache-busted URL with timestamp
+REM Create cache-busted URL with timestamp - FORCE Snapdragon demo route
 set TIMESTAMP=%date:~-4,4%%date:~-10,2%%date:~-7,2%%time:~0,2%%time:~3,2%%time:~6,2%
-set CACHE_BUST_URL=%DEMO_URL%?v=%TIMESTAMP%&nocache=1
+set CACHE_BUST_URL=http://localhost:%DEMO_PORT%/snapdragon?v=%TIMESTAMP%&nocache=1&platform=snapdragon
+echo       - Forced Snapdragon demo URL: %CACHE_BUST_URL%
+echo [%date% %time%] Enforced Snapdragon demo route: /snapdragon >> "%LOG_FILE%"
 
 REM Kill any existing browser sessions to force fresh start
 taskkill /f /im chrome.exe 2>nul >nul

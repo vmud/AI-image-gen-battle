@@ -105,11 +105,19 @@ class ErrorMitigationSystem:
     
     def detect_model_missing(self) -> bool:
         """Check if AI models are present"""
+        # Skip model check if emergency mode is active
+        emergency_mode = os.environ.get('EMERGENCY_MODE', '').lower() in ('true', '1', 'yes')
+        if emergency_mode:
+            print(f"[DEBUG] Health Check: Emergency mode active, skipping model detection")
+            return False
+            
         model_paths = [
             Path("C:/AIDemo/models/sdxl-base-1.0"),
             Path("C:/AIDemo/models/sdxl_snapdragon_optimized"),
         ]
-        return not any(p.exists() for p in model_paths)
+        models_missing = not any(p.exists() for p in model_paths)
+        print(f"[DEBUG] Health Check: Models missing = {models_missing}")
+        return models_missing
     
     def detect_memory_issue(self) -> bool:
         """Check for memory pressure"""
