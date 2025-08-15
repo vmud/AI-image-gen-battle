@@ -59,11 +59,11 @@ This is ONE complete SDXL model optimized for Intel DirectML acceleration.
 
 [CmdletBinding(SupportsShouldProcess)]
 param(
-    [switch]$CheckOnly = $false,
-    [switch]$Force = $false,
-    [switch]$SkipModelDownload = $false,
-    [switch]$UseHttpRange = $true,
-    [switch]$NonInteractive = $false,
+    [switch]$CheckOnly,
+    [switch]$Force,
+    [switch]$SkipModelDownload,
+    [switch]$UseHttpRange,
+    [switch]$NonInteractive,
     [string]$LogPath = "C:\AIDemo\logs",
     [ValidateSet('Speed', 'Balanced', 'Quality')]
     [string]$OptimizationProfile = 'Balanced'
@@ -354,7 +354,7 @@ function New-DeploymentState {
 function Save-DeploymentState {
     param([string]$Context = "General")
     
-    if ($script:deploymentState -eq $null) {
+    if ($null -eq $script:deploymentState) {
         Write-VerboseInfo "No deployment state to save"
         return
     }
@@ -382,7 +382,7 @@ function Save-DeploymentState {
 function Test-StepCompleted {
     param([string]$StepName)
     
-    if ($script:deploymentState -eq $null) {
+    if ($null -eq $script:deploymentState) {
         return $false
     }
     
@@ -396,7 +396,7 @@ function Set-StepCompleted {
         [hashtable]$Details = @{}
     )
     
-    if ($script:deploymentState -eq $null) {
+    if ($null -eq $script:deploymentState) {
         Write-WarningMsg "No deployment state available"
         return
     }
@@ -427,7 +427,7 @@ function Set-StepCompleted {
 function New-Checkpoint {
     param([string]$CheckpointName)
     
-    if ($script:deploymentState -eq $null) {
+    if ($null -eq $script:deploymentState) {
         Write-WarningMsg "No deployment state available for checkpoint"
         return
     }
@@ -447,7 +447,7 @@ function New-Checkpoint {
 
 # Get resume point based on completed steps
 function Get-ResumePoint {
-    if ($script:deploymentState -eq $null -or $script:deploymentState.CompletedSteps.Count -eq 0) {
+    if ($null -eq $script:deploymentState -or $script:deploymentState.CompletedSteps.Count -eq 0) {
         return 0
     }
     
@@ -677,7 +677,7 @@ function Invoke-ValidationWithState {
 
 # Generate comprehensive deployment report
 function Get-DeploymentStateReport {
-    if ($script:deploymentState -eq $null) {
+    if ($null -eq $script:deploymentState) {
         return "No deployment state available"
     }
     
@@ -873,6 +873,8 @@ function Invoke-Rollback {
 
 # Create required directories
 function Initialize-Directories {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Creating directory structure"
     
     $dirs = @(
@@ -972,7 +974,7 @@ function Test-IntelHardwareRequirements {
         # Check AVX-512 support (simplified check)
         Write-VerboseInfo "Checking AVX-512 instruction set support..."
         try {
-            $cpuInfo = Get-WmiObject Win32_Processor | Select-Object -First 1
+            $null = Get-WmiObject Win32_Processor | Select-Object -First 1
             # Note: Actual AVX-512 detection would require CPUID checks
             # For now, assume 11th gen+ Intel Core has AVX-512
             if ($hardwareStatus.ProcessorGeneration -ge 11) {
@@ -1137,6 +1139,8 @@ function Show-HardwareConfirmation {
 
 # Check and install Python
 function Install-Python {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Checking Python installation"
     
     # Only support Python 3.10 for DirectML compatibility (research confirms 3.11+ issues)
@@ -1219,6 +1223,8 @@ function Install-Python {
 
 # Install virtual environment and core dependencies
 function Install-CoreDependencies {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Installing core dependencies"
     
     if (!$PSCmdlet.ShouldProcess("Core dependencies", "Install")) {
@@ -1281,6 +1287,8 @@ function Install-CoreDependencies {
 
 # Install Intel-specific acceleration packages with comprehensive demo dependencies
 function Install-IntelAcceleration {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Installing Intel acceleration packages and demo dependencies"
     
     if (Test-StepCompleted "intel_acceleration") {
@@ -1639,7 +1647,7 @@ print('=== End Intel Demo Verification ===')
 }
 
 # Configure DirectML provider
-function Configure-DirectMLProvider {
+function Set-DirectMLProvider {
     Write-StepProgress "Configuring DirectML optimization settings"
     
     Write-Info "Setting DirectML environment variables..."
@@ -1664,7 +1672,9 @@ function Configure-DirectMLProvider {
 }
 
 # Download large models with resume capability
-function Download-IntelModels {
+function Invoke-IntelModelDownload {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Downloading Intel-optimized models"
     
     if ($SkipModelDownload) {
@@ -1767,15 +1777,15 @@ function Download-IntelModels {
             Write-Info "Resuming download from $([math]::Round($existingSize / 1MB))MB..."
             
             try {
-                Download-WithResume -URL $model.URL -OutputFile $outputFile -ExpectedSize $model.Size
+                Invoke-ResumableDownload -URL $model.URL -OutputFile $outputFile -ExpectedSize $model.Size
                 Write-Success "$($model.Name) downloaded"
             } catch {
                 Write-WarningMsg "Resume failed, attempting fresh download..."
                 Remove-Item $outputFile -Force -ErrorAction SilentlyContinue
-                Download-SimpleFile -URL $model.URL -OutputFile $outputFile
+                Invoke-FileDownload -URL $model.URL -OutputFile $outputFile
             }
         } else {
-            Download-SimpleFile -URL $model.URL -OutputFile $outputFile
+            Invoke-FileDownload -URL $model.URL -OutputFile $outputFile
         }
     }
     
@@ -1813,7 +1823,7 @@ function Download-IntelModels {
 }
 
 # Simple file download function
-function Download-SimpleFile {
+function Invoke-FileDownload {
     param(
         [string]$URL,
         [string]$OutputFile
@@ -1828,7 +1838,7 @@ function Download-SimpleFile {
         
         # Add progress callback
         $webClient.add_DownloadProgressChanged({
-            param($sender, $e)
+            param($eventSender, $e)
             $percent = $e.ProgressPercentage
             Write-Progress -Activity "Downloading" -Status "$percent% Complete" -PercentComplete $percent
         })
@@ -1848,7 +1858,7 @@ function Download-SimpleFile {
 }
 
 # Download with HTTP range support for resume
-function Download-WithResume {
+function Invoke-ResumableDownload {
     param(
         [string]$URL,
         [string]$OutputFile,
@@ -1904,7 +1914,9 @@ function Download-WithResume {
 }
 
 # Create startup scripts
-function Create-StartupScripts {
+function New-StartupScripts {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Creating startup scripts"
     
     if (!$PSCmdlet.ShouldProcess("Startup scripts", "Create")) {
@@ -1995,7 +2007,9 @@ start "" "$script:DEMO_BASE\start_intel_demo.bat"
 }
 
 # Configure network and firewall
-function Configure-Network {
+function Set-NetworkConfiguration {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Configuring network settings"
     
     if ($CheckOnly) {
@@ -2118,6 +2132,8 @@ except Exception as e:
 
 # Update repository and deploy all client files
 function Update-Repository {
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
     Write-StepProgress "Deploying Intel demo client files"
     
     if (Test-StepCompleted "repository_update") {
@@ -2309,7 +2325,7 @@ function Show-PerformanceExpectations {
 }
 
 # Generate final report
-function Generate-Report {
+function New-SetupReport {
     Write-StepProgress "Generating setup report"
     
     $timestamp = (Get-Date).ToString('yyyy-MM-dd HH:mm:ss')
@@ -2417,6 +2433,54 @@ Log file: $script:logFile
     Write-Success "Report saved to $reportPath"
 }
 
+# Backwards compatibility wrappers for legacy function names (suppressed PSUseApprovedVerbs)
+function Configure-DirectMLProvider {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+    Set-DirectMLProvider
+}
+function Download-IntelModels {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+    Invoke-IntelModelDownload
+}
+function Download-SimpleFile {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    param(
+        [string]$URL,
+        [string]$OutputFile
+    )
+    Invoke-FileDownload -URL $URL -OutputFile $OutputFile
+}
+function Download-WithResume {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    param(
+        [string]$URL,
+        [string]$OutputFile,
+        [int64]$ExpectedSize
+    )
+    Invoke-ResumableDownload -URL $URL -OutputFile $OutputFile -ExpectedSize $ExpectedSize
+}
+function Create-StartupScripts {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+    New-StartupScripts
+}
+function Configure-Network {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param()
+    Set-NetworkConfiguration
+}
+function Generate-Report {
+    [System.Diagnostics.CodeAnalysis.SuppressMessageAttribute("PSUseApprovedVerbs", "", Justification="Backwards compatibility")]
+    param()
+    New-SetupReport
+}
+
 # Main execution function
 function Main {
     # Parameters are handled by CmdletBinding
@@ -2499,17 +2563,17 @@ function Main {
             }
             
             # Configure DirectML
-            Configure-DirectMLProvider
+            Set-DirectMLProvider
             
             # Download models
-            Download-IntelModels
+            Invoke-IntelModelDownload
         }
         
         # Configure network
-        Configure-Network
+        Set-NetworkConfiguration
         
         # Create startup scripts
-        Create-StartupScripts
+        New-StartupScripts
         
         # Show performance expectations
         Show-PerformanceExpectations
@@ -2548,7 +2612,7 @@ function Main {
     Write-VerboseInfo "Total elapsed time: $($elapsed.ToString('hh\:mm\:ss'))"
     
     # Generate final report
-    Generate-Report
+    New-SetupReport
     
     # Summary
     Write-Host "`n" + ("=" * 60) -ForegroundColor DarkGray

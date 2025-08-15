@@ -8,18 +8,32 @@ import sys
 import os
 import time
 import logging
+import importlib
 from pathlib import Path
 
 def setup_logging():
-    """Setup logging for the launcher"""
+    """Setup logging for the launcher with optional debug mode.
+
+    Debug mode can be activated by:
+      - Setting environment variable DEMO_DEBUG=1
+      - Passing --debug on the command line
+    """
     log_path = Path("C:/AIDemo/logs")
     log_path.mkdir(exist_ok=True)
     
     timestamp = time.strftime("%Y%m%d_%H%M%S")
     log_file = log_path / f"intel_demo_launch_{timestamp}.log"
+
+    # Determine debug flag from env or CLI
+    debug_flag = (os.environ.get("DEMO_DEBUG", "0") in ("1", "true", "True")) or ("--debug" in sys.argv)
+    if "--debug" in sys.argv:
+        # Propagate to child modules (demo_client / SocketIO)
+        os.environ["DEMO_DEBUG"] = "1"
+    
+    level = logging.DEBUG if debug_flag else logging.INFO
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=level,
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler(log_file),
@@ -27,7 +41,9 @@ def setup_logging():
         ]
     )
     
-    return logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
+    logger.info("Debug mode %s", "ENABLED" if debug_flag else "disabled")
+    return logger
 
 def validate_environment():
     """Quick environment validation before launch"""
@@ -66,13 +82,21 @@ def validate_environment():
         print("✅ Models directory found")
     
     # Quick DirectML check
+    torch_directml = None
     try:
-        import torch_directml
-        if torch_directml.is_available():
-            print("✅ DirectML acceleration available")
-        else:
-            print("⚠️  DirectML available but no device detected")
-    except ImportError:
+        torch_directml = importlib.import_module("torch_directml")
+    except Exception:
+        torch_directml = None
+
+    if torch_directml:
+        try:
+            if torch_directml.is_available():
+                print("✅ DirectML acceleration available")
+            else:
+                print("⚠️  DirectML available but no device detected")
+        except Exception:
+            print("⚠️  DirectML detected but failed to query availability")
+    else:
         print("⚠️  DirectML not installed - will use CPU fallback")
     
     return True
@@ -81,6 +105,8 @@ def set_intel_environment():
     """Set Intel-specific environment variables"""
     logger = logging.getLogger(__name__)
     
+    cpu_count = os.cpu_count() or 4
+
     intel_env = {
         'PYTHONPATH': str(Path.cwd()),
         'INTEL_OPTIMIZED': '1',
@@ -89,8 +115,8 @@ def set_intel_environment():
         'ORT_DIRECTML_GRAPH_OPTIMIZATION': 'ALL',
         'MKL_ENABLE_INSTRUCTIONS': 'AVX512',
         'MKL_DYNAMIC': 'FALSE',
-        'MKL_NUM_THREADS': str(max(4, os.cpu_count() // 2)),
-        'OMP_NUM_THREADS': str(os.cpu_count())
+        'MKL_NUM_THREADS': str(max(4, cpu_count // 2)),
+        'OMP_NUM_THREADS': str(cpu_count)
     }
     
     print("⚙️  Setting Intel optimization environment...")

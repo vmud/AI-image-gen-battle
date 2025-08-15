@@ -359,7 +359,6 @@ function Clear-TempFiles {
 $script:NPU_PROVIDERS = @(
     @{Name="QNNExecutionProvider"; Package="onnxruntime-qnn"; Priority=100; TestCmd="Test-QNNProvider"},
     @{Name="DmlExecutionProvider"; Package="onnxruntime-directml"; Priority=80; TestCmd="Test-DirectMLProvider"},
-    @{Name="WinMLExecutionProvider"; Package="winml"; Priority=60; TestCmd="Test-WinMLProvider"},
     @{Name="OpenVINOExecutionProvider"; Package="onnxruntime-openvino"; Priority=40; TestCmd="Test-OpenVINOProvider"},
     @{Name="CPUExecutionProvider"; Package="onnxruntime"; Priority=20; TestCmd="Test-CPUProvider"}
 )
