@@ -290,16 +290,123 @@ echo }
 goto :eof
 
 :create_launcher_scripts
-REM Main launcher
+REM Main launcher with auto-frontend update
 (
 echo @echo off
+echo setlocal EnableDelayedExpansion
 echo cd /d C:\AIDemo
-echo echo Starting AI Demo ^(!detectedPlatform!^)...
-echo call .venv\Scripts\activate.bat
-echo python src\demo_client.py
+echo.
+echo echo ==========================================
+echo echo   AI Image Generation Demo
+echo echo   Auto-updating to latest frontend...
+echo echo ==========================================
+echo echo.
+echo.
+echo REM Detect platform
+echo for /f "tokens=2 delims==" %%%%i in ^('wmic cpu get name /value ^^^| find "Name"'^) do ^(
+echo     set "cpuName=%%%%i"
+echo ^)
+echo.
+echo echo ^^^^!cpuName^^^^! ^^^| findstr /i "snapdragon qualcomm arm" ^>nul  
+echo if ^^^^!errorlevel^^^^! == 0 ^(
+echo     set "detectedPlatform=snapdragon"
+echo     echo Snapdragon processor detected
+echo ^) else ^(
+echo     echo ^^^^!cpuName^^^^! ^^^| findstr /i "intel" ^>nul
+echo     if ^^^^!errorlevel^^^^! == 0 ^(
+echo         set "detectedPlatform=intel"
+echo         echo Intel processor detected
+echo     ^) else ^(
+echo         set "detectedPlatform=intel"
+echo         echo Unknown processor, defaulting to Intel
+echo     ^)
+echo ^)
+echo.
+echo echo Platform: ^^^^!detectedPlatform^^^^!
+echo echo.
+echo.
+echo REM Check for latest frontend update
+echo set "sourceDir=C:\Users\Mosai\ai-demo-working"
+echo if exist "^^^^!sourceDir^^^^!\src\windows-client\static" ^(
+echo     echo Updating to latest frontend...
+echo     
+echo     REM Quick backup and update
+echo     if exist static.backup rmdir /s /q static.backup
+echo     if exist static move static static.backup
+echo     
+echo     xcopy "^^^^!sourceDir^^^^!\src\windows-client\static" static\ /E /I /Q /Y ^>nul 2^>^^^&1
+echo     if ^^^^!errorlevel^^^^! == 0 ^(
+echo         echo   ✓ Latest frontend deployed
+echo     ^) else ^(
+echo         echo   ⚠ Could not update frontend, using existing
+echo         if exist static.backup move static.backup static
+echo     ^)
+echo     
+echo     REM Update Python files
+echo     xcopy "^^^^!sourceDir^^^^!\src\windows-client\*.py" src\ /Q /Y ^>nul 2^>^^^&1
+echo     if ^^^^!errorlevel^^^^! == 0 ^(
+echo         echo   ✓ Latest application files deployed
+echo     ^) else ^(
+echo         echo   ⚠ Could not update application files
+echo     ^)
+echo ^) else ^(
+echo     echo Source directory not found, using deployed version
+echo ^)
+echo.
+echo.
+echo REM Configure platform-specific interface
+echo echo Configuring ^^^^!detectedPlatform^^^^! interface...
+echo.
+echo ^(
+echo echo import re
+echo echo import os
+echo echo.
+echo echo # Read demo_client.py
+echo echo with open^^^('src/demo_client.py', 'r', encoding='utf-8'^^^) as f:
+echo echo     content = f.read^^^^^^
+echo echo.
+echo echo # Platform-specific route
+echo echo if '^^^^!detectedPlatform^^^^!' == 'snapdragon':
+echo echo     new_route = """        @self.app.route^^^('/'^^^)
+echo echo         def index^^^(self^^^):
+echo echo             return send_from_directory^^^('static', 'snapdragon-demo.html'^^^)"""
+echo echo else:
+echo echo     new_route = """        @self.app.route^^^('/'^^^)
+echo echo         def index^^^(self^^^):
+echo echo             return send_from_directory^^^('static', 'intel-demo.html'^^^)"""
+echo echo.
+echo echo # Replace platform selection route
+echo echo selection_route = r'@self\\.app\\.route\\\^^^(\\'^/\\'^\\\^^^)\\s+def index\\\^^^(self\\\^^^):.*?return render_template_string\\\^^^(html\\\^^^)'
+echo echo content = re.sub^^^(selection_route, new_route, content, flags=re.DOTALL^^^)
+echo echo.
+echo echo # Write back
+echo echo with open^^^('src/demo_client.py', 'w', encoding='utf-8'^^^) as f:
+echo echo     f.write^^^(content^^^)
+echo echo.
+echo echo print^^^('✓ ^^^^!detectedPlatform^^^^! interface configured'^^^)
+echo ^) ^> temp_route_fix.py
+echo.
+echo call .venv\Scripts\activate.bat ^>nul 2^>^^^&1
+echo python temp_route_fix.py ^>nul 2^>^^^&1
+echo del temp_route_fix.py ^>nul 2^>^^^&1
+echo.
+echo echo ✓ Demo configured for ^^^^!detectedPlatform^^^^! platform
+echo echo.
+echo.
+echo echo ==========================================
+echo echo   Starting ^^^^!detectedPlatform^^^^! AI Demo
+echo echo   Latest "Get Snapped" Interface
+echo echo ==========================================
+echo echo.
+echo.
+echo set DEMO_PLATFORM=^^^^!detectedPlatform^^^^!
+echo python src\demo_client.py --platform=^^^^!detectedPlatform^^^^!
+echo.
+echo echo.
+echo echo Demo has stopped.
 echo pause
 ) > "%TargetDir%\launch_demo.bat"
-echo   Created launch_demo.bat
+echo   Created enhanced launch_demo.bat with auto-frontend update
 
 REM Setup script
 if /i "!detectedPlatform!"=="intel" (
