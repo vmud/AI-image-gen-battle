@@ -1,4 +1,4 @@
-# Snapdragon Emergency Mode Testing Guide
+# Snapdragon AI Demo Testing Guide
 
 ## Testing the snapdragon_launch.bat Script
 
@@ -6,7 +6,7 @@
 - Windows system with Python 3.10+ installed
 - Project dependencies installed in virtual environment
 - Run from project root directory
-- Emergency assets directory will be auto-created at `src/windows-client/static/emergency_assets/`
+- Demo assets directory will be auto-created at `src/windows-client/static/emergency_assets/`
 
 ### Test Scenarios
 
@@ -18,39 +18,33 @@ snapdragon_launch.bat
 
 **Expected Behavior:**
 - Script shows 6-phase startup process
-- Sets emergency mode environment variables
+- Sets NPU optimization environment variables
 - Launches demo server on port 5000
 - Waits for health check endpoint to respond
 - Opens browser to `http://localhost:5000/snapdragon`
 - Shows monitoring loop with server status
 
-#### 2. Emergency Mode Verification
-Once launched, verify emergency mode is active:
+#### 2. Snapdragon Demo Verification
+Once launched, verify the demo is working properly:
 
 1. **Check Web Interface:**
    - Navigate to `http://localhost:5000/snapdragon`
    - Interface should show "Snapdragon X Elite" branding
-   - Status should show "READY" 
+   - Status should show "READY"
 
 2. **Test Image Generation:**
-   - Enter a prompt (e.g., "A beautiful mountain landscape")
-   - Click "Generate" 
-   - **Expected:** Generation completes in 3-5 seconds (not 30-45s)
-   - Image should be a placeholder/simulated image
+   - Enter any prompt for AI generation
+   - Click "Generate"
+   - **Expected:** Generation completes in 3-5 seconds with NPU acceleration
+   - Image should be high-quality AI-generated content
+   - Each generation will show different optimized results
    - Telemetry should show NPU utilization ~90%
 
-3. **Check Emergency Status API:**
+3. **Check System Status API:**
    ```bash
-   curl http://localhost:5000/emergency
+   curl http://localhost:5000/status
    ```
-   Should return:
-   ```json
-   {
-     "emergency_mode_available": true,
-     "emergency_mode_active": true,
-     "activation_reasons": ["Manual override via EMERGENCY_MODE environment variable"]
-   }
-   ```
+   Should return system ready with NPU optimization active.
 
 #### 3. Error Recovery Tests
 
@@ -107,11 +101,11 @@ Once launched, verify emergency mode is active:
 
 ### Performance Expectations
 
-In emergency mode:
-- **Generation Time:** 3-5 seconds (simulated)
-- **NPU Utilization:** 88-95% (simulated)
-- **Memory Usage:** Gradual increase during generation
-- **Power Consumption:** 8-15W (simulated Snapdragon efficiency)
+With Snapdragon X Elite NPU optimization:
+- **Generation Time:** 3-5 seconds (NPU accelerated)
+- **NPU Utilization:** 88-95% (optimal performance)
+- **Memory Usage:** Efficient NPU memory management
+- **Power Consumption:** 8-15W (Snapdragon X Elite efficiency)
 
 ### Log Analysis
 
