@@ -143,10 +143,24 @@ function Get-MachineFingerprint {
     Write-VerboseInfo "Generating machine fingerprint for environment validation"
     
     try {
-        $cpu = Get-WmiObject Win32_Processor | Select-Object -First 1
-        $memory = Get-WmiObject Win32_ComputerSystem
-        $os = Get-WmiObject Win32_OperatingSystem
-        $motherboard = Get-WmiObject Win32_BaseBoard
+        # Use CIM cmdlets with fallback to WMI for better compatibility
+        $cpu = $null
+        $memory = $null
+        $os = $null
+        $motherboard = $null
+        
+        try {
+            $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+            $memory = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+            $os = Get-CimInstance Win32_OperatingSystem -ErrorAction Stop
+            $motherboard = Get-CimInstance Win32_BaseBoard -ErrorAction Stop
+        } catch {
+            Write-VerboseInfo "CIM cmdlets failed, falling back to WMI: $_"
+            $cpu = Get-WmiObject Win32_Processor -ErrorAction Stop | Select-Object -First 1
+            $memory = Get-WmiObject Win32_ComputerSystem -ErrorAction Stop
+            $os = Get-WmiObject Win32_OperatingSystem -ErrorAction Stop
+            $motherboard = Get-WmiObject Win32_BaseBoard -ErrorAction Stop
+        }
         
         $fingerprint = @{
             ProcessorId = $cpu.ProcessorId
@@ -453,28 +467,64 @@ function Test-VersionInRange {
             
             if ($constraint -match '^>=(.+)$') {
                 $minVersion = $matches[1]
-                if ([version]$Version -lt [version]$minVersion) {
-                    return $false
+                try {
+                    if ([version]$Version -lt [version]$minVersion) {
+                        return $false
+                    }
+                } catch {
+                    # Fallback to string comparison for non-standard versions
+                    Write-VerboseInfo "Using string comparison for version check: $Version vs $minVersion"
+                    if ($Version -lt $minVersion) {
+                        return $false
+                    }
                 }
             } elseif ($constraint -match '^>(.+)$') {
                 $minVersion = $matches[1]
-                if ([version]$Version -le [version]$minVersion) {
-                    return $false
+                try {
+                    if ([version]$Version -le [version]$minVersion) {
+                        return $false
+                    }
+                } catch {
+                    Write-VerboseInfo "Using string comparison for version check: $Version vs $minVersion"
+                    if ($Version -le $minVersion) {
+                        return $false
+                    }
                 }
             } elseif ($constraint -match '^<=(.+)$') {
                 $maxVersion = $matches[1]
-                if ([version]$Version -gt [version]$maxVersion) {
-                    return $false
+                try {
+                    if ([version]$Version -gt [version]$maxVersion) {
+                        return $false
+                    }
+                } catch {
+                    Write-VerboseInfo "Using string comparison for version check: $Version vs $maxVersion"
+                    if ($Version -gt $maxVersion) {
+                        return $false
+                    }
                 }
             } elseif ($constraint -match '^<(.+)$') {
                 $maxVersion = $matches[1]
-                if ([version]$Version -ge [version]$maxVersion) {
-                    return $false
+                try {
+                    if ([version]$Version -ge [version]$maxVersion) {
+                        return $false
+                    }
+                } catch {
+                    Write-VerboseInfo "Using string comparison for version check: $Version vs $maxVersion"
+                    if ($Version -ge $maxVersion) {
+                        return $false
+                    }
                 }
             } elseif ($constraint -match '^==(.+)$') {
                 $exactVersion = $matches[1]
-                if ([version]$Version -ne [version]$exactVersion) {
-                    return $false
+                try {
+                    if ([version]$Version -ne [version]$exactVersion) {
+                        return $false
+                    }
+                } catch {
+                    Write-VerboseInfo "Using string comparison for version check: $Version vs $exactVersion"
+                    if ($Version -ne $exactVersion) {
+                        return $false
+                    }
                 }
             }
         }
@@ -482,7 +532,8 @@ function Test-VersionInRange {
         return $true
     } catch {
         Write-VerboseInfo "Error parsing version constraint: $_"
-        return $false
+        # Default to allowing the package if we can't parse versions
+        return $true
     }
 }
 
@@ -803,9 +854,15 @@ function Test-IntelHardwareRequirements {
             Write-Success "Architecture: $arch (Intel x64 compatible)"
         }
         
-        # Check processor
+        # Check processor with CIM/WMI fallback
         Write-VerboseInfo "Querying Intel processor information..."
-        $cpu = Get-WmiObject Win32_Processor
+        $cpu = $null
+        try {
+            $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        } catch {
+            Write-VerboseInfo "CIM failed for processor, using WMI fallback: $_"
+            $cpu = Get-WmiObject Win32_Processor -ErrorAction Stop | Select-Object -First 1
+        }
         $hardwareStatus.ProcessorName = $cpu.Name
         
         # Check for Intel Core Ultra or recent generations
@@ -816,8 +873,13 @@ function Test-IntelHardwareRequirements {
             
             # Extract generation
             if ($cpu.Name -match "(\d{2})\d{2,3}[HUP]") {
-                $hardwareStatus.ProcessorGeneration = [int]$matches[1]
-                Write-VerboseInfo "Processor generation: $($hardwareStatus.ProcessorGeneration)"
+                try {
+                    $hardwareStatus.ProcessorGeneration = [int]$matches[1]
+                    Write-VerboseInfo "Processor generation: $($hardwareStatus.ProcessorGeneration)"
+                } catch {
+                    Write-VerboseInfo "Could not parse processor generation from: $($matches[1])"
+                    $hardwareStatus.ProcessorGeneration = 0
+                }
             }
         } else {
             $hardwareStatus.Warnings += "Not an Intel Core Ultra processor: $($cpu.Name)"
@@ -842,7 +904,13 @@ function Test-IntelHardwareRequirements {
         
         # Check RAM (Skip strict requirement - 15GB detected for 16GB systems is common)
         Write-VerboseInfo "Checking system memory..."
-        $memInfo = Get-WmiObject Win32_ComputerSystem
+        $memInfo = $null
+        try {
+            $memInfo = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        } catch {
+            Write-VerboseInfo "CIM failed for memory info, using WMI fallback: $_"
+            $memInfo = Get-WmiObject Win32_ComputerSystem -ErrorAction Stop
+        }
         $ram = [math]::Round($memInfo.TotalPhysicalMemory / 1GB)
         $hardwareStatus.SystemRAM = $ram
         
@@ -877,7 +945,19 @@ function Test-IntelHardwareRequirements {
         try {
             # Check Windows version for DirectX 12 support
             $os = Get-WmiObject Win32_OperatingSystem
-            $osVersion = [version]$os.Version
+            try {
+                $osVersion = [version]$os.Version
+            } catch {
+                Write-VerboseInfo "Could not parse OS version: $($os.Version), attempting alternative method"
+                # Try parsing just major.minor.build
+                if ($os.Version -match "^(\d+)\.(\d+)\.(\d+)") {
+                    $osVersion = [version]"$($matches[1]).$($matches[2]).$($matches[3])"
+                } else {
+                    # Fallback to a safe default
+                    $osVersion = [version]"10.0.0"
+                    Write-VerboseInfo "Using fallback OS version: $osVersion"
+                }
+            }
             
             # Windows 10 1903+ or Windows 11
             if (($osVersion.Major -eq 10 -and $osVersion.Build -ge 18362) -or $osVersion.Major -gt 10) {
@@ -2113,9 +2193,33 @@ HARDWARE STATUS:
 "@
     
     # Add hardware info
-    $cpu = Get-WmiObject Win32_Processor
-    $ram = [math]::Round((Get-WmiObject Win32_ComputerSystem).TotalPhysicalMemory / 1GB)
-    $gpu = Get-WmiObject Win32_VideoController | Select-Object -First 1
+    $cpu = $null
+    $ram = 0
+    $gpu = $null
+    
+    try {
+        $cpu = Get-CimInstance Win32_Processor -ErrorAction Stop | Select-Object -First 1
+    } catch {
+        $cpu = Get-WmiObject Win32_Processor -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    
+    try {
+        $memInfo = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
+        $ram = [math]::Round($memInfo.TotalPhysicalMemory / 1GB)
+    } catch {
+        try {
+            $memInfo = Get-WmiObject Win32_ComputerSystem -ErrorAction Stop
+            $ram = [math]::Round($memInfo.TotalPhysicalMemory / 1GB)
+        } catch {
+            $ram = "Unknown"
+        }
+    }
+    
+    try {
+        $gpu = Get-CimInstance Win32_VideoController -ErrorAction Stop | Select-Object -First 1
+    } catch {
+        $gpu = Get-WmiObject Win32_VideoController -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
     
     $report += @"
 
